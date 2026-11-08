@@ -1,0 +1,15 @@
+# Build artefacts
+build/
+.pio/
+*.o
+*.d
+*.elf
+*.hex
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local logs
+*.log

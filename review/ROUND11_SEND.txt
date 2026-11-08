@@ -1,0 +1,671 @@
+ROUND 11 — VERIFICATION PHASE (not a review)
+
+Frozen baseline: VL53L8CX x 5 carrier / Teensy 4.0, design Rev 7, firmware Rev 7.
+Self-contained: no files are attached. Everything you must verify is embedded
+below. Do not assume a repository exists.
+
+================================================================================
+0. RULES OF ENGAGEMENT — read this first
+================================================================================
+
+This round has a different job from rounds 1-10.
+
+Rounds 1-10 were adversarial review: find what is wrong. That loop has converged
+(rounds 9 and 10 produced no BLOCKER, MAJOR or MINOR, and round 10 verified the
+round-9 fixes from source). Round 11 is a VERIFICATION phase:
+
+  * The design and firmware are FROZEN as of this message. Only items you mark
+    FAIL may change afterwards.
+  * Your job is to certify each requirement in section 3 against the embedded
+    sources, or to fail it with evidence. Not to propose improvements.
+  * You may not re-open a previously resolved item unless you can show the
+    resolution itself is wrong. Cite what is embedded.
+  * Style, naming, comment density and "I would have done it differently" are
+    out of scope this round.
+  * If a requirement cannot be checked without hardware, say so. That is a
+    legitimate and expected outcome here — it is not a failure of the review.
+
+Every row of section 3 must come back with exactly one of:
+
+  PASS   - the embedded source or a cited document proves the criterion.
+  FAIL   - it does not, and you can point at the line/section and say why.
+  NV     - not verifiable from here (no hardware, or no document in hand).
+         State what measurement or document closes it.
+
+A FAIL without a citation will be discarded. An NV without a named closing
+action is also discarded.
+
+================================================================================
+1. WHAT IS FROZEN
+================================================================================
+
+Product: five identical carrier boards, one ST VL53L8CX 8x8 multizone ToF sensor
+each, on a Teensy 4.0 (i.MX RT1062, 600 MHz, 3.3 V I/O, not 5 V tolerant).
+Sensors run from a separate external 3.3 V rail behind a host-controlled load
+switch. The PCB/schematic is not drawn; this phase precedes layout.
+
+Verified external facts used below (sources as cited in earlier rounds):
+  DS14161 Rev 7      - SPI <= 3 MHz mode 3, NCS-to-clock >= 0 ns; I2C <= 1 MHz;
+                       AVDD 3.13-3.47 V; IOVDD/CORE_1V8 1.62-1.98 V; slew
+                       minimums 0.012 V/us (CORE_1V8/IOVDD) and 0.001 V/us
+                       (AVDD); 43/50 mA AVDD + 50/80 mA CORE_1V8 active, +10 mA
+                       peak each; V_IH >= 0.7 x IOVDD, V_OL <= 0.2 x IOVDD at
+                       4 mA; reflow 240 C rec / 260 C max, 3 passes, convection
+                       only; all three supplies must come down together.
+  SCES898C Rev C     - SN74AXC4T774: OE active-low, referenced to VCCA; 71 kOhm
+                       typ static pull-downs on data I/Os (7.3.9); t_EN <= 26 ns,
+                       t_DIS <= 20 ns, t_pd <= 7 ns (5.11); external pull-up on a
+                       data I/O must be <= 7 kOhm.
+  SCES882E           - SN74AXC1T45: DIR = LOW selects the B port as driver (B->A).
+                       Pin numbers still unconfirmed.
+  TCA9406 Rev G      - Fm+ translator, VCCA 1.65-3.6 V, VCCB 2.3-5.5 V,
+                       VCCA <= VCCB, internal 10 kOhm on all four pins, Hi-Z with
+                       OE low.
+  MIC550x Rev 2.3    - 1.8 V LDO, turn-on 50 us typ / 125 us max, 25 Ohm
+                       auto-discharge, V_IH(EN) 1.2 V, 4 MOhm internal EN
+                       pull-down.
+  TPS22918           - 2 A load switch, R_ON ~52 mOhm typ / <= 78 mOhm, configurable
+                       rise time via CT (SR [us/V] = 0.55 x CT[pF] + 30), quick
+                       output discharge when off.
+  Teensy core 1.62.0 - pin map in 1.3; CNT_SCK_PINS = 1 for every T4.0 SPIClass;
+                       Wire BUFFER_LENGTH 136, tx 137.
+
+Items still marked [U] anywhere: SCES882E pin numbers, TPS22918 t_D at CT = 0 /
+ON V_IH / current-limit minimum / QOD resistance, MIC5504 exact turn-on endpoints,
+the sensor's actual trimmed block set, and re-init behaviour on a streaming
+sensor. These are bench-closable and appear in the residual register (section 5).
+
+================================================================================
+2. EMBEDDED SOURCE — FINAL
+================================================================================
+
+--- 2.1 Hardware: carrier -----------------------------------------------------
+
+J1 (1x6): 3V3_EXT | GND | SCLK | MOSI | MISO | NCS
+   |
+   +-- 3V3 --> U2 MIC5504-1.8 (EN = IN, 25 R auto-discharge) --> 1V8
+   |            C6 2.2uF in, C7 1uF out
+   +-- SCLK/MOSI/MISO --> U3 SN74AXC4T774 (VCCA 1.8 / VCCB 3.3), OE = NCS_S
+   +-- NCS --> U5 SN74AXC1T45 (DIR = GND, B->A: host drives sensor),
+   |           A = NCS_S, B = NCS_H
+   |
+   +-- VL53L8CX (SPI mode; AVDD 3.3, CORE_1V8 + IOVDD 1.8)
+
+R1-R5 = 47 kOhm to IOVDD (NCS_S, INT, SYNC, LPn, SPI_I2C_N).
+R6   = 6.8 kOhm SCLK_S -> 1V8 (idle 1.8 x 71/77.8 = 1.64 V vs V_IH 1.26 V).
+R7   = 4.7 kOhm NCS_H -> 3V3 (hold deselected while host GPIO is a reset input).
+C1 = 4.7 uF AVDD; C2/C3/C4/C5/C8/C9 = 100 nF; C7 = 1 uF on 1V8.
+20 SMD parts per board, 100 total, plus the system BOM below.
+
+--- 2.2 Hardware: system ------------------------------------------------------
+
+One load switch on 3V3_EXT (TPS22918-class), CT open => t_R ~ 95 us at 3.3 V
+(0.0278 V/us, 2.3x the DS14161 minimum). ON pin: 100 kOhm to GND (rail defaults
+off), driven by Teensy pin 2. 22 uF at switch VIN, 1 uF at VOUT, >= 47 uF bulk
+upstream of the switch. Downstream capacitance 36.5 uF => inrush ~ 1.27 A into a
+2 A switch. Rail load 465 mA typ / 750 mA peak; <= 59 mV switch drop.
+
+--- 2.3 Teensy 4.0 pin map ----------------------------------------------------
+
+Bus              Object   SCK/SDA  MOSI  MISO/SCL  CS   Location
+SPI (LPSPI4)     SPI      13       11    12        10   header
+SPI1 (LPSPI3)    SPI1     27       26    1         0    SCK/MOSI bottom pads
+SPI2 (LPSPI1)    SPI2     37       35    34        36   bottom pads
+Wire (LPI2C1)    Wire     19       18    -         -    header
+Wire1 (LPI2C3)   Wire1    16       17    -         -    header
+
+Pins 0-23 breadboardable; 24-39 bottom pads. Pin 13 = LED (SCK idles high in
+mode 3, no alt-SCK). Pins 0/1 = Serial1; 16/17 = Serial4. Pin 2 = rail enable.
+
+--- 2.4 Firmware: mode_a_single_bus.ino (production), verbatim ---------------
+
+~~~cpp
+#include <Arduino.h>
+#include <SPI.h>
+#include <vl53l8cx.h>
+
+#ifndef VL53L8CX_CS_SETTLE_US
+#error "Unpatched VL53L8CX library: CS-settle delay missing."
+#endif
+#if !defined(VL53L8CX_COMMS_CHUNK_SIZE) || VL53L8CX_COMMS_CHUNK_SIZE > 1024
+#error "VL53L8CX chunk-size override missing: copy vl53l8cx_platform_config_custom.h"
+#endif
+#if !defined(VL53L8CX_DISABLE_AMBIENT_PER_SPAD) || !defined(VL53L8CX_DISABLE_SIGNAL_PER_SPAD) \
+ || !defined(VL53L8CX_DISABLE_MOTION_INDICATOR)
+#error "Output trimming missing: the patched platform_config_custom.h is not being used"
+#endif
+static_assert(sizeof(VL53L8CX_ResultsData) <= 512,
+              "ResultsData should be the trimmed layout (~258 bytes)");
+
+static const uint8_t NUM_SENSORS = 5;
+static const uint8_t NCS_PINS[NUM_SENSORS] = {10, 9, 8, 7, 6};
+static const uint8_t RAIL_EN_PIN = 2;
+
+static const uint32_t SENSOR_SPI_HZ = 3000000UL;
+static const uint8_t  RANGING_HZ    = 15;
+static const uint8_t  CENTER_ZONE   = 27;
+static const uint8_t  MAX_CONSEC_ERRORS = 50;
+static const uint32_t RETRY_PERIOD_MS   = 30000;
+static const uint8_t  SILENT_BACKOFF_AFTER = 3;
+static const uint32_t SILENT_BACKOFF_MULT  = 10;
+static const uint16_t FRAME_PERIOD_MS   = 1000 / RANGING_HZ;
+static const uint32_t STALE_MS          = 3UL * FRAME_PERIOD_MS;
+static const uint32_t NO_FRAME_TIMEOUT_MS =
+  (5UL * FRAME_PERIOD_MS > 2000UL) ? (5UL * FRAME_PERIOD_MS) : 2000UL;
+
+static inline bool status_ok(uint8_t s) { return s == 5 || s == 9; }
+
+static VL53L8CX s0(&SPI, NCS_PINS[0], -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s1(&SPI, NCS_PINS[1], -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s2(&SPI, NCS_PINS[2], -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s3(&SPI, NCS_PINS[3], -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s4(&SPI, NCS_PINS[4], -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX *const sensors[NUM_SENSORS] = {&s0, &s1, &s2, &s3, &s4};
+
+static bool     sensor_ok[NUM_SENSORS]     = {false};
+static uint8_t  consec_errors[NUM_SENSORS] = {0};
+static uint8_t  silent_fails[NUM_SENSORS]  = {0};
+static int16_t  last_mm[NUM_SENSORS];
+static uint32_t last_update_ms[NUM_SENSORS];
+static uint32_t last_retry_ms[NUM_SENSORS];
+static VL53L8CX_ResultsData results;
+
+static void park_all_ncs_high() {
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    pinMode(NCS_PINS[i], OUTPUT);
+    digitalWrite(NCS_PINS[i], HIGH);
+  }
+}
+
+static bool configure(uint8_t i) {
+  uint8_t st = sensors[i]->init();
+  if (st != VL53L8CX_STATUS_OK) { Serial.printf("# S%u init FAILED (%u)\n", i, st); return false; }
+  st = sensors[i]->set_resolution(VL53L8CX_RESOLUTION_8X8);
+  if (st != VL53L8CX_STATUS_OK) { Serial.printf("# S%u set_resolution FAILED (%u)\n", i, st); return false; }
+  st = sensors[i]->set_ranging_frequency_hz(RANGING_HZ);
+  if (st != VL53L8CX_STATUS_OK) { Serial.printf("# S%u set_frequency FAILED (%u)\n", i, st); return false; }
+  st = sensors[i]->set_ranging_mode(VL53L8CX_RANGING_MODE_CONTINUOUS);
+  if (st != VL53L8CX_STATUS_OK) { Serial.printf("# S%u set_mode FAILED (%u)\n", i, st); return false; }
+  return true;
+}
+
+static bool start(uint8_t i) {
+  uint8_t st = sensors[i]->start_ranging();
+  if (st != VL53L8CX_STATUS_OK) { Serial.printf("# S%u start_ranging FAILED (%u)\n", i, st); return false; }
+  return true;
+}
+
+static void demote(uint8_t i) {
+  sensor_ok[i] = false;
+  consec_errors[i] = 0;
+  last_mm[i] = -1;
+  last_retry_ms[i] = millis();
+}
+
+static bool probe(uint8_t i) {
+  for (uint8_t a = 0; a < 3; a++) {
+    uint8_t alive = 0;
+    if (sensors[i]->is_alive(&alive) == VL53L8CX_STATUS_OK && alive) return true;
+    delay(50);
+  }
+  return false;
+}
+
+static bool bring_up(uint8_t i) {
+  if (!probe(i)) {
+    Serial.printf("# S%u is_alive FAILED\n", i);
+    return false;
+  }
+  if (configure(i) && start(i)) {
+    consec_errors[i] = 0;
+    last_update_ms[i] = millis();
+    return true;
+  }
+  return false;
+}
+
+static void bring_up_all() {
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    sensor_ok[i] = false;
+    if (!probe(i)) {
+      Serial.printf("# S%u not responding at boot\n", i);
+      continue;
+    }
+    for (uint8_t a = 0; a < 3 && !sensor_ok[i]; a++) {
+      sensor_ok[i] = configure(i);
+      if (!sensor_ok[i]) delay(50);
+    }
+  }
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    if (sensor_ok[i]) {
+      sensor_ok[i] = start(i);
+      if (sensor_ok[i]) {
+        last_update_ms[i] = millis();
+        Serial.printf("# S%u ranging at %u Hz\n", i, RANGING_HZ);
+      }
+    }
+  }
+}
+
+void setup() {
+  pinMode(RAIL_EN_PIN, OUTPUT);
+  digitalWrite(RAIL_EN_PIN, HIGH);
+  delay(5);
+
+  park_all_ncs_high();
+
+  Serial.begin(115200);
+  uint32_t t0 = millis();
+  while (!Serial && (millis() - t0) < 3000) {}
+
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    last_mm[i] = -1;
+    last_update_ms[i] = 0;
+    last_retry_ms[i] = 0;
+  }
+
+  Serial.println("# VL53L8CX MODE A: single SPI bus (header pins), sequential");
+
+  SPI.begin();
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    sensors[i]->begin();
+  }
+  bring_up_all();
+
+  Serial.println("# ms,S0,S1,S2,S3,S4");
+}
+
+void loop() {
+  bool updated_any = false;
+
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    if (!sensor_ok[i]) continue;
+
+    uint8_t ready = 0;
+    uint8_t st = sensors[i]->check_data_ready(&ready);
+    if (st != VL53L8CX_STATUS_OK) {
+      if (++consec_errors[i] >= MAX_CONSEC_ERRORS) {
+        Serial.printf("# S%u demoted after %u errors\n", i, consec_errors[i]);
+        demote(i);
+      }
+      continue;
+    }
+    if (!ready) continue;
+
+    if (sensors[i]->get_ranging_data(&results) != VL53L8CX_STATUS_OK) {
+      if (++consec_errors[i] >= MAX_CONSEC_ERRORS) {
+        Serial.printf("# S%u demoted after %u errors\n", i, consec_errors[i]);
+        demote(i);
+      }
+      continue;
+    }
+
+    consec_errors[i] = 0;
+    silent_fails[i] = 0;
+    const uint8_t z = CENTER_ZONE * VL53L8CX_NB_TARGET_PER_ZONE;
+    uint8_t tgt = results.nb_target_detected[CENTER_ZONE];
+    uint8_t stt = results.target_status[z];
+    last_mm[i] = (tgt > 0 && status_ok(stt)) ? results.distance_mm[z] : -1;
+    last_update_ms[i] = millis();
+    updated_any = true;
+  }
+
+  if (updated_any) {
+    uint32_t now = millis();
+    Serial.printf("%lu", (unsigned long)now);
+    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+      bool fresh = sensor_ok[i] && (now - last_update_ms[i] <= STALE_MS);
+      Serial.printf(",%d", fresh ? (int)last_mm[i] : -1);
+    }
+    Serial.println();
+  }
+
+  bool did_retry = false;
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    uint32_t period = (silent_fails[i] >= SILENT_BACKOFF_AFTER)
+                        ? RETRY_PERIOD_MS * SILENT_BACKOFF_MULT
+                        : RETRY_PERIOD_MS;
+    if (!sensor_ok[i] && (millis() - last_retry_ms[i] >= period)) {
+      last_retry_ms[i] = millis();
+      Serial.printf("# retry S%u\n", i);
+      sensor_ok[i] = bring_up(i);
+      did_retry = true;
+      break;
+    }
+  }
+
+  if (did_retry) {
+    uint32_t t = millis();
+    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+      if (sensor_ok[i]) last_update_ms[i] = t;
+    }
+  } else {
+    uint32_t now_ms = millis();
+    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+      if (sensor_ok[i] && (now_ms - last_update_ms[i] > NO_FRAME_TIMEOUT_MS)) {
+        if (silent_fails[i] < SILENT_BACKOFF_AFTER &&
+            ++silent_fails[i] == SILENT_BACKOFF_AFTER) {
+          Serial.printf("# S%u silent %ux -> retry period %lu ms\n", i,
+                        SILENT_BACKOFF_AFTER,
+                        (unsigned long)(RETRY_PERIOD_MS * SILENT_BACKOFF_MULT));
+        }
+        Serial.printf("# S%u no frame for %lu ms -> demoted\n", i,
+                      (unsigned long)(now_ms - last_update_ms[i]));
+        demote(i);
+      }
+    }
+  }
+
+  delay(2);
+}
+~~~
+
+--- 2.5 Firmware: mode_b_multi_bus.ino — the only differences ---------------
+
+~~~cpp
+static const uint8_t NUM_SENSORS = 5;
+static const uint8_t RAIL_EN_PIN = 2;
+static const uint32_t SENSOR_SPI_HZ = 3000000UL;
+static const uint32_t SENSOR_I2C_HZ = 400000UL;
+static const uint8_t  RANGING_HZ = 15;
+static const int I2C_RST_PIN = -1;
+
+static const uint8_t CS0 = 10, CS1 = 0, CS2 = 36;
+static VL53L8CX s0(&SPI,  CS0, -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s1(&SPI1, CS1, -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s2(&SPI2, CS2, -1, -1, SENSOR_SPI_HZ);
+static VL53L8CX s3(&Wire,  -1, I2C_RST_PIN);
+static VL53L8CX s4(&Wire1, -1, I2C_RST_PIN);
+static VL53L8CX_ResultsData results[NUM_SENSORS];
+// park_all_cs_high() drives CS0/CS1/CS2 only.
+// setup(): RAIL_EN_PIN first (pinMode, HIGH, delay(5)), then SPI/SPI1/SPI2.begin(),
+//          Wire.begin(); Wire.setClock(SENSOR_I2C_HZ); Wire1.begin/setClock.
+~~~
+
+Loop/probe/configure/start/demote/bring_up/bring_up_all are byte-identical to
+2.4 apart from results[i]. Not embedded: single_sensor_bringup.ino (same
+structure, CS 10, same rail-enable prologue).
+
+--- 2.6 Library: vl53l8cx.h macros ------------------------------------------
+
+~~~cpp
+#ifndef VL53L8CX_CS_SETTLE_US
+#define VL53L8CX_CS_SETTLE_US 1
+#endif
+#if VL53L8CX_CS_SETTLE_US < 1
+#error "VL53L8CX_CS_SETTLE_US must be >= 1 for the OE->NCS_S carrier"
+#endif
+#ifndef VL53L8CX_I2C_NACK_RETRIES
+#define VL53L8CX_I2C_NACK_RETRIES 5
+#endif
+~~~
+
+--- 2.7 Library: IO_Read, I2C path (final) ----------------------------------
+
+~~~cpp
+if (dev_i2c) {
+  int status = 0;
+  uint8_t buffer[2];
+  for (uint8_t attempt = 0; ; attempt++) {
+    dev_i2c->beginTransmission((uint8_t)((_dev.platform.address >> 1) & 0x7F));
+    buffer[0] = (uint8_t)(RegisterAddress >> 8);
+    buffer[1] = (uint8_t)(RegisterAddress & 0xFF);
+    dev_i2c->write(buffer, 2);
+    status = dev_i2c->endTransmission(false);
+    if (status == 0) break;
+#ifdef ARDUINO_ARCH_STM32
+    if (status) { dev_i2c->end(); dev_i2c->begin(); }
+#endif
+    if (attempt + 1 >= VL53L8CX_I2C_NACK_RETRIES) return 1;
+    delayMicroseconds(100);
+  }
+  uint32_t i = 0;
+  if (size > DEFAULT_I2C_BUFFER_LEN) {
+    while (i < size) {
+      uint8_t current_read_size = (size - i > DEFAULT_I2C_BUFFER_LEN
+                                     ? DEFAULT_I2C_BUFFER_LEN : size - i);
+      uint8_t got = 0;
+      for (uint8_t chunk_attempt = 0; ; chunk_attempt++) {
+        got = (uint8_t)dev_i2c->requestFrom(
+                ((uint8_t)((_dev.platform.address >> 1) & 0x7F)), current_read_size);
+        if (got != 0) break;
+        if (chunk_attempt + 1 >= VL53L8CX_I2C_NACK_RETRIES) return 1;
+        delayMicroseconds(100);
+      }
+      while (dev_i2c->available()) { p_values[i] = dev_i2c->read(); i++; }
+      if (got != current_read_size) return 1;
+    }
+  } else {
+    for (uint8_t attempt = 0; ; attempt++) {
+      if (dev_i2c->requestFrom(((uint8_t)((_dev.platform.address >> 1) & 0x7F)), size) != 0) {
+        break;
+      }
+      if (attempt + 1 >= VL53L8CX_I2C_NACK_RETRIES) return 1;
+      delayMicroseconds(100);
+    }
+    while (dev_i2c->available()) { p_values[i] = dev_i2c->read(); i++; }
+  }
+  return i != size;
+}
+~~~
+
+--- 2.8 Library: IO_Read, SPI path (final) ---------------------------------
+
+~~~cpp
+if (dev_spi) {
+  uint32_t position = 0, data_size = 0;
+  uint16_t temp;
+  uint8_t data_write[2];              // only the 2-byte command header
+  for (position = 0; position < size; position += VL53L8CX_COMMS_CHUNK_SIZE) {
+    ...
+    data_write[0] = SPI_READ_MASK(temp) >> 8;
+    data_write[1] = SPI_READ_MASK(temp) & 0xFF;
+    dev_spi->beginTransaction(SPISettings(spi_speed, MSBFIRST, SPI_MODE3));
+    digitalWrite(cs_pin, LOW);
+    delayMicroseconds(VL53L8CX_CS_SETTLE_US);
+    dev_spi->transfer(&data_write, 2);
+    for (uint16_t i = 0; i < data_size; i++)
+      *(p_values + i + position) = dev_spi->transfer(0x00);
+    digitalWrite(cs_pin, HIGH);
+    dev_spi->endTransaction();
+  }
+  return 0;
+}
+~~~
+
+--- 2.9 Library: IO_Write, I2C path (final) --------------------------------
+
+~~~cpp
+if (dev_i2c) {
+  uint32_t i = 0;
+  uint8_t buffer[2];
+  uint8_t err = 0;
+  while (i < size) {
+    size_t current_write_size = (size - i > DEFAULT_I2C_BUFFER_LEN
+                                   ? DEFAULT_I2C_BUFFER_LEN : size - i);
+    dev_i2c->beginTransmission((uint8_t)((_dev.platform.address >> 1) & 0x7F));
+    buffer[0] = (uint8_t)((RegisterAddress + i) >> 8);
+    buffer[1] = (uint8_t)((RegisterAddress + i) & 0xFF);
+    dev_i2c->write(buffer, 2);
+    if (dev_i2c->write(p_values + i, current_write_size) == 0) {
+      return 1;
+    } else {
+      i += current_write_size;
+      if (size - i) {
+        uint8_t st = (uint8_t)dev_i2c->endTransmission(true);
+        if (st != 0 && err == 0) err = st;
+      }
+    }
+  }
+  uint8_t last = (uint8_t)dev_i2c->endTransmission(true);
+  return (err != 0) ? err : last;
+}
+~~~
+
+IO_Write SPI keeps uint8_t data_write[VL53L8CX_COMMS_CHUNK_SIZE + 2] and the
+same beginTransaction -> CS low -> delayMicroseconds(VL53L8CX_CS_SETTLE_US) ->
+transfer -> CS high -> endTransaction sequence.
+
+--- 2.10 Library: vl53l8cx_platform_config_custom.h ------------------------
+
+~~~cpp
+#include "vl53l8cx_platform_config_default.h"
+
+#define VL53L8CX_COMMS_CHUNK_SIZE 1024
+
+#if defined(__IMXRT1062__) || defined(ARDUINO_TEENSY40) || defined(ARDUINO_TEENSY41)
+#define DEFAULT_I2C_BUFFER_LEN 128
+#endif
+
+#define VL53L8CX_DISABLE_AMBIENT_PER_SPAD
+#define VL53L8CX_DISABLE_NB_SPADS_ENABLED
+#define VL53L8CX_DISABLE_SIGNAL_PER_SPAD
+#define VL53L8CX_DISABLE_RANGE_SIGMA_MM
+#define VL53L8CX_DISABLE_REFLECTANCE_PERCENT
+#define VL53L8CX_DISABLE_MOTION_INDICATOR
+~~~
+
+Derived sizes: frame 320 B, MAX_RESULTS_SIZE 328 B,
+sizeof(VL53L8CX_ResultsData) 258 B, TEMPORARY_BUFFER_SIZE 1024.
+
+================================================================================
+3. VERIFICATION MATRIX — fill every row, return the table
+================================================================================
+
+Method: A = analysis of the embedded source + cited document
+        I = inspection of the embedded text (nothing else needed)
+        M = measurement, needs hardware
+Status: PASS / FAIL / NV (with the closing action)
+
+--- E: carrier electrical -----------------------------------------------------
+ID   Requirement                                              Method Criterion
+E1   IOVDD and CORE_1V8 stay within 1.62-1.98 V                A     1.8 V LDO
+E2   AVDD stays within 3.13-3.47 V                            A     rail + 59 mV
+E3   CORE_1V8 0.9->1.6 V in <= 58.3 us                        M     per board
+E4   AVDD to full level in <= 3.3 ms                          M     t_R ~ 95 us
+E5   SPI <= 3 MHz, mode 3, 40-60 % duty                       I     3 MHz MODE3
+E6   NCS-to-SCLK setup >= 0 ns                                I     1 us settle
+E7   Exactly one MISO driver at any time                      A     OE = NCS_S
+E8   SCLK_S idle >= V_IH when U3 disabled                     A     1.64 >= 1.26
+E9   No back-feed with either side unpowered                  A     switch+order
+E10  MISO_H defined when all boards deselected               M     see S-bench
+E11  AXC internal pull-downs confirmed                        A     DOC 7.3.9
+E12  Five required IOVDD pull-ups present                     I     R1-R5
+E13  CS settle covers U3+U5 enable                            A     1 us vs 26 ns
+E14  Load-switch t_R <= 275 us                                M     CT open
+E15  Inrush 1.27 A <= switch rating                           A     2 A part
+E16  Switch IR drop <= 100 mV at 750 mA                       A     59 mV
+E17  Rail fully discharged on host reset                      A     QOD + 100k
+E18  Rail defaults OFF at reset                                I     100k on ON
+E19  Rail raised before any CS is driven                      I     setup order
+
+--- F: firmware -------------------------------------------------------------
+ID   Requirement                                              Method Criterion
+F1   All three sketches compile for teensy:avr:teensy40       I     arduino-cli
+F2   Rail enable is the first action of setup()               I     2.4
+F3   Four compile-time guards present                          I     CS/chunk/trim/assert
+F4   Configure order res -> freq -> mode -> start              I     configure()
+F5   Every driver call's status is checked                    I     configure/start/loop
+F6   Validity filter: nb_target > 0 AND status 5 or 9          I     loop()
+F7   8x8, 15 Hz, continuous mode                               I     constants
+F8   Frame 320 B / struct 258 B                                A     api.c block table
+F9   No-frame timeout scales with rate                         I     max(2000, 5P)
+F10  Retry = one init attempt per period                        I     bring_up()
+F11  Retry precedes the no-frame check and re-baselines        I     loop() tail
+F12  Silent back-off after 3, capped at 300 s                  I     silent_fails
+F13  is_alive probe gates boot and retry                       I     probe()
+F14  stop_ranging() never called at runtime                    I     no call site
+F15  Stale data prints -1, not a frozen value                  I     STALE_MS
+F16  No heap allocation anywhere                               I     static only
+F17  Largest stack frame quantified                            A     1026 B
+F18  Static RAM within budget                                 M     108 544 B
+F19  Degraded mode is observable on the serial line            I     # lines
+F20  Hung sensor recovery path exists                          A     rail cycle
+
+--- L: library patches ------------------------------------------------------
+ID   Requirement                                              Method Criterion
+L1   CS-settle delay after CS-low in IO_Read and IO_Write     I     2.8/2.9
+L2   Zero-length retry in both I2C read paths                 I     2.7
+L3   Short (partial) chunk aborts instead of resyncing        I     2.7
+L4   IO_Write returns the first failed chunk                   I     2.9
+L5   All I2C loops bounded                                    A     no unbounded
+L6   Chunk size 1024 and guards                               I     2.10
+L7   I2C buffer cap 128 on i.MX RT                             I     2.10
+L8   temp_buffer >= every consumer under the trim              A     1024 >= 776
+L9   Trim guards consistent between bitmask, size and parser   A     same macros
+
+--- S: system / assembly / docs ---------------------------------------------
+ID   Requirement                                              Method Criterion
+S1   Mode A uses header pins only                              I     13/11/12, 10-6
+S2   Pin 2 free on the Teensy 4.0                             A     no bus role
+S3   Harness <= 20 cm, ground per board                        M     build rule
+S4   Thermal-pad paste = AN5897 Fig. 3 pattern                 I     open item
+S5   Reflow 240/260 C, 3 passes, convection only               I     DS14161 T24
+S6   No wet cleaning or coating                                I     mfg guidelines
+S7   BOM complete and self-consistent (20/board + system)      I     2.1/2.2
+S8   Rail current 465 mA typ / 750 mA peak sized for            A     >= 1.5 A
+S9   Single star ground point stated                           I     docs
+
+================================================================================
+4. WHAT "DONE" LOOKS LIKE — the four outputs I need from you
+================================================================================
+
+4.1 The matrix in section 3, fully filled. PASS rows may be one word. FAIL rows
+    need the line or doc section. NV rows need the closing action.
+
+4.2 A verdict line: "safe to fabricate" / "safe to fabricate with these caveats"
+    / "not safe until X is resolved". Nothing in between.
+
+4.3 A bench verification procedure you would actually sign your name to, in the
+    order it should be run, with a numeric pass threshold per step. Assume the
+    equipment available is: a 4-channel 100 MHz scope, a bench supply, a DMM, a
+    USB power meter, a soldering iron, and the Teensy's USB serial. Cover at
+    minimum: rail edge and CORE_1V8 window per board; MISO idle with all boards
+    deselected; first ranging frame and the accepted block size; one sensor
+    removed and restored; a forced demote on a streaming sensor; I2C rise times
+    at 400 kHz if a Mode B carrier is built.
+
+4.4 A residual risk register: everything you cannot close without hardware or a
+    document you do not have, each with the measurement that closes it and the
+    consequence if it turns out marginal.
+
+================================================================================
+5. RESIDUAL REGISTER — pre-filled, extend it
+================================================================================
+
+R1  TPS22918 t_D at CT = 0, ON V_IH, current-limit minimum, QOD resistance
+    -> scope ON->rail edge (closes t_D, t_R, QOD). If t_R > 275 us, fit CT = 0
+       and re-measure; if still slow, the slew rule fails on paper.
+R2  MIC5504 exact turn-on endpoints (50 us typ / 125 us max, endpoints undefined)
+    -> CORE_1V8 window per board (E3).
+R3  ST firmware's actual trimmed block set
+    -> Stage 1c: start_ranging's own verify (api.c 612-617) fails loudly if the
+       host-computed 320 B disagrees; a successful start == agreement.
+R4  Re-init of a streaming sensor (not in ST's documented flow)
+    -> force demote() on a running sensor; init() must return 0 and frames resume.
+R5  SCES882E pin numbers for U5
+    -> confirm on TI's package figure before schematic capture; the direction
+       itself is already verified (B->A).
+R6  MISO_H idle level with five Hi-Z boards
+    -> scope with all CS high; expect ~0 V via 14.2 kOhm; otherwise 47 kOhm
+       pull-down at the host.
+R7  I2C rise time at 400 kHz with 2.2 kOhm and the TCA9406's internal 10 kOhm
+    -> scope at the far end, <= 300 ns; drop to 1.5 kOhm above ~150 pF.
+
+================================================================================
+6. OUTPUT FORMAT
+================================================================================
+
+Return, in this order:
+
+  A. Verdict line (4.2).
+  B. The section-3 matrix, every row PASS/FAIL/NV, one line each.
+  C. Failures, if any, in the usual form:
+       [SEVERITY] title / Location / Issue / Evidence / Fix
+     Severity only for FAIL rows: BLOCKER (cannot fabricate), MAJOR (works but
+     violates a spec), MINOR (documentation). NITs are out of scope this round.
+  D. Bench procedure (4.3).
+  E. Residual register (5), with your additions.
+
+If everything passes, say so in one sentence and do not manufacture findings —
+a clean verification is a valid and useful result.

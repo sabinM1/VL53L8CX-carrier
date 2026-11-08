@@ -1,0 +1,900 @@
+# VL53L8CX × 5 ↔ Waveshare RP2350-Zero Mini: Final Aggregated Design (Rev 2)
+
+Date: 2026-11-02. Supersedes `VL53L8CX_Teensy40_Final_Aggregated_Design.md` (Rev 1, single board, Teensy 4.0, Variants A/B).
+
+**Confidence tags (unchanged from Rev 1)**
+- **[V]** verified from a document or page I read this session.
+- **[S]** secondary or forum source.
+- **[U]** unverified: recollection or inference. Check before layout or ordering.
+
+Rev 1 sources (DS14161 Rev 11, UM3109, AN5897, AN5939, TN1532, SCES898C) are cited as "[V Rev 1]" where I rely on the Rev 1 verification and did not re-open the document today.
+
+---
+
+## Revision notes (what changed and why)
+
+| # | Change | Why |
+|---|---|---|
+| 1 | **Variant B deleted** (5 V input, 3.3 V LDO U4, C8 5 V cap, cascade and 3.3 V-LDO thermal text). | Requested. Only the 3.3 V-only design remains. |
+| 2 | **Host changed from Teensy 4.0 to Waveshare RP2350-Zero Mini.** Pin map, boot state, current budget and software all rewritten. | Requested. |
+| 3 | **One board becomes five identical carrier boards** on a shared SPI bus with one NCS GPIO per board. | Requested. |
+| 4 | **OE tied to local NCS_S** instead of GND. Polarity confirmed: OE high = Hi-Z, OE low = enabled, OE referenced to VCCA [V TI SCES898C overview]. | Requested. Gives true Hi-Z on MISO, which a floating-input shifter does not (see change 5). |
+| 5 | **⚠ DESIGN DEFECT FOUND IN THE REQUESTED OE→NCS_S SCHEME, FIXED.** If NCS itself passes through the same AXC4T774 that OE gates, the board can never be selected (deadlock, §2.1). **NCS is now translated by a separate one-bit shifter U5 (SN74AXC1T45), and U3 carries only SCLK, MOSI and MISO.** | Without this the design does not work. |
+| 6 | **Rev 1 MISO reasoning reversed.** Rev 1 said the AXC internal pull-down makes the MISO resistor redundant. With several shifters on one MISO net, TI says an enabled idle shifter drives the line low and fights the selected slave. Per-board OE gating is the fix [V TI E2E threads]. | Multi-slave bus. |
+| 7 | **Power architecture changed: external 3.3 V rail for the sensors; RP2350-Zero powered only by USB-C.** The 800 mA onboard LDO fails on current margin, thermal dissipation and the USB budget (§3.3). | Requested analysis; result is "no". |
+| 8 | **BOM per board: 15 → 20 SMD parts.** Removed U4, C8(5 V). Added U5, 2 bypass caps, R6 (SCLK_S pull-up), R7 (NCS_H pull-up). | Items 5, 4 and boot-state safety. |
+| 9 | **New §6 Firmware & library compatibility** with search findings and a 5-sensor sketch. Library status is **only partly verified**; unverified API names are flagged. | Requested. |
+| 10 | Checklist, risks and assumptions rewritten for multi-sensor and the new host. | Requested. |
+
+**Assumptions (explicit)**
+1. Five identical carrier boards, each with its own sensor, 1.8 V LDO, U3, U5 and a 1×6 header.
+2. SCLK, MOSI and MISO are a shared 3.3 V bus; five NCS lines are separate.
+3. Sensor worst-case current is 150 mA peak and 93 mA typical per board on the 3.3 V rail (Table 14 [V Rev 1]). Peaks from different sensors are assumed to coincide (conservative).
+4. Wiring is short bench or small-harness wiring, total SCLK length ≲ 20 cm (§5.2).
+5. DS14161 Rev 11 is the sensor reference.
+6. "RP2350-Zero Mini" and Waveshare's "RP2350-Zero" are treated as the same electrical board (same 29-GPIO, ME6217 description on both pages [V]). A Mini-specific board definition was not verified.
+
+---
+
+## 0. Executive summary
+
+1. **Architecture.** Five identical carriers. Each has a VL53L8CX in SPI mode, a local MIC5504-1.8 V LDO (CORE_1V8 + IOVDD), a SN74AXC4T774 (U3) for SCLK/MOSI/MISO, and a SN74AXC1T45 (U5) for NCS. All five share SCLK, MOSI and MISO to an RP2350-Zero Mini on SPI1; each has its own NCS GPIO.
+2. **OE→NCS_S works only if NCS bypasses the gated shifter.** U3's OE is tied to NCS_S (active-low OE: NCS high disables outputs, so MISO is Hi-Z when unselected). NCS_S is produced by U5, not U3. Tying OE to NCS_S while NCS also passes through U3 deadlocks (§2.1).
+3. **The onboard 800 mA LDO cannot power the array.** Peak sensor load 750 mA plus host ≈ 40 mA leaves ~10 mA margin (1.3 %); with the WS2812 lit the load exceeds the rating. A linear regulator from 5 V would dissipate ~1.3 W peak and draws that current from USB (limit 500 mA). **Use an external ≥1.5 A 3.3 V supply for the sensor boards; power the RP2350-Zero from USB-C; common ground; never join the two 3.3 V rails.**
+4. **Pins.** SPI1: GP10 (SCK), GP11 (MOSI), GP12 (MISO). NCS1–5: GP2–GP6. All in the GP0–GP15 range. I assumed those are among the 20 edge pins, **[U] until checked against Waveshare's pinout image** (the text of the wiki gives only a picture).
+5. **Firmware.** STM32duino VL53L8CX is documented as "compatible with all architectures", but I found **no RP2040/RP2350 SPI report** and its README does not mention them. Arduino-Pico lists "Waveshare RP2350 Zero" as a supported board. Treat first bring-up with one board as the real test (§6).
+6. **Carried over from Rev 1 unchanged:** the translator cannot be removed (IOVDD abs max 1.98 V), the 1.8 V rail must rise 0.9→1.6 V in **≤58 µs** (DS14161 Rev 12 Table 5: 0.012 V/µs min; the MIC5504 does not guarantee this at max — see §4), SPI mode 3 at ≤3 MHz, five 47 kΩ pull-ups to IOVDD, no wet cleaning.
+
+---
+
+## 1. A. Verification report (updated)
+
+| # | Item | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Sensor pinout, rails, pull-ups, SPI mode and timing, current budget, thermal pad | ✅ unchanged | Rev 1 items 1–9 [V Rev 1] |
+| 2 | AXC4T774 OE is **active-low**: OE high = all A and B Hi-Z; OE low = enabled | ✅ | TI SCES898C overview: "when OE is set to high, both Ax and Bx pins are in the high-impedance state" [V] |
+| 3 | OE and DIR are referenced to **VCCA** (1.8 V) | ✅ | "Ax pins and control pins (DIRx and OE) are reference to VCCA logic levels" [V]. Hence OE must be driven from the 1.8 V sensor-side NCS_S, which is exactly what the scheme does. |
+| 4 | AXC4T774 I/Os have integrated static pull-downs; a floating input drives its output low | ✅ | Datasheet feature "I/Os with Integrated Static Pull-Down Resistors" [V]; TI forum answer [V]. Value and exact conditions **not retrieved** [U]. |
+| 5 | Idle AXC drives MISO low and contends with the active slave on a shared MISO net | ✅ | TI E2E 1603441: another slave and another translator pull the line low; "force /OE high on every level translator that isn't in use" [V] |
+| 6 | OE tied to chip select is a valid multi-slave fix | ✅ | E2E 1116877: "both proposed solutions would work" (answer by a forum contributor, not stated as TI staff) [S] |
+| 7 | **NCS routed through the same shifter whose OE is tied to NCS_S deadlocks** | ✅ (logic, from #2) | §2.1 |
+| 8 | AXC4T774 OE enable/disable time (tEN/tDIS) | ⚠ not retrieved | Look up SCES898C §5.x. At 3 MHz the margin is large; the sketch adds no delay. [U] |
+| 9 | SN74AXC1T45 pinout: 1 VCCA, 2 GND, 3 A, 4 B, 5 DIR, 6 VCCB; DIR high = A→B, DIR low = B→A | ✅ | TI SCES882E Table 4-1, one numbering shown for DBV, DRL, DCK, DEA, DTQ [V]. **Rev 6: the direction is confirmed (DIR = LOW ⇒ B port output)**, which is what the carrier needs — NCS_H (3.3 V, host) drives NCS_S (1.8 V). The DIR reference rail is still not stated on the page [U]; TI's SN74AXC1T45 viewer page says DIR is referenced to VCCA. |
+| 10 | Unused/idle input rules: IOVDD ≤ 1.98 V, never 5 V on IOVDD | ✅ | [V Rev 1] DS14161 Table 11 |
+| 11 | AXC "If either VCC input is below 100 mV, all I/O outputs are disabled" and Ioff partial power-down | ✅ | TI features list [V]. This is why the external 3.3 V rail and the RP2350 rail may power up in any order without driving the shifter (§3.4). |
+| 12 | Level shifter still mandatory | ✅ | RP2350 IO is 3.3 V; sensor IOVDD ≤ 1.98 V |
+
+---
+
+## 2. B. Architecture and the OE→NCS_S correction
+
+### 2.1 Why NCS must not pass through the gated shifter
+
+Requested scheme: U3.OE = NCS_S, where NCS_S is the sensor-side NCS net.
+
+1. NCS_S idles high (R1 47 kΩ to 1V8). OE high puts all of U3's outputs in Hi-Z, including the NCS channel (A3).
+2. The host drives NCS_H low. The NCS channel is disabled, so NCS_S does not follow. NCS_S stays high, OE stays high.
+3. The sensor is never selected. The state is stable and unrecoverable by firmware.
+
+**Fix (implemented below):** produce NCS_S with U5, a separate SN74AXC1T45 with no enable pin. NCS_H → U5 → NCS_S → {sensor C2, R1, U3.OE}. U3 carries only SCLK, MOSI and MISO. This keeps the requested behaviour (NCS high = U3 Hi-Z, MISO released) and works.
+
+### 2.2 Behaviour table (per board)
+
+| NCS_H (3.3 V) | NCS_S (1.8 V) | U3 (OE) | SCLK_S / MOSI_S | MISO_H |
+|---|---|---|---|---|
+| High (not selected) | High | Hi-Z | SCLK_S held high by R6; MOSI_S Hi-Z | Hi-Z (does not load the shared net) |
+| Low (selected) | Low | Enabled | Driven by host | Driven by sensor MISO |
+
+### 2.3 Why R6 (SCLK_S pull-up) exists
+
+When U3 is disabled, SCLK_S is Hi-Z. On selection, SCLK_S would be driven high by the host (mode 3 idles high) a few ns after NCS_S falls, creating a **rising SCLK edge while NCS is low**, which the sensor could sample as a clock. R6 to 1V8 holds SCLK_S at its idle level so no edge occurs. **R6 = 6.8 kΩ** (Rev 4; was 10 kΩ): SCES898C §7.3.9 gives 71 kΩ typical static pull-downs on the AXC4T774 data I/Os [V], so the idle level is 1.8 × 71/77.8 = **1.64 V** instead of 1.58 V with 10 kΩ. Both clear the sensor's V_IH (0.7 × 1.8 = 1.26 V, DS14161 Table 15), but 6.8 kΩ adds margin for the same part count. TI also states that any external **pull-up** on an AXC data I/O must be ≤ 7 kΩ, which 6.8 kΩ satisfies. Cost: ~0.26 mA only while SCLK is low and driven. This is an engineering addition, not a datasheet requirement; scope it.
+
+### 2.4 Why R7 (NCS_H pull-up) is now mandatory
+
+RP2350 GPIO pads reset with the internal pull-down enabled [U, RP2350 datasheet from memory, check]. Without R7, all five NCS_H lines are low at reset, so all five sensors are selected and five translators are enabled onto one MISO net until firmware runs. R7 = 4.7 kΩ to 3V3 holds NCS_H high. Firmware must still drive NCS high as its first action.
+
+**⚠ Rev 3 (round-2 review): R7 back-feeds the dead rail.** R7 references the board's 3V3_EXT. With the host on and the external rail off, each GPIO drives ~0.7 mA through R7 into the 3V3 node (~3.5 mA for five), partially powering AVDD and the LDO input; CORE_1V8 can then creep up slowly and never see the 0.012 V/µs edge. With the rail on and the host off, R7 pushes current into the RP2350 pad clamps with IOVDD at 0 V. Ioff on the shifter does not cover a resistor path. Fix: move the five pull-ups to the host side (referenced to the host's own 3V3) or add a host-controlled load switch on 3V3_EXT.
+
+### 2.5 System topology
+
+```
+RP2350-Zero Mini (USB-C powered, 3.3 V logic from its own LDO)
+  GP10 SCK  ───────┬────────┬────────┬────────┬────────┐  (shared)
+  GP11 MOSI ───────┤        │        │        │        │
+  GP12 MISO ◄──────┤        │        │        │        │
+  GP2  NCS1 ──► Board 1     │        │        │        │
+  GP3  NCS2 ─────────────► Board 2    │        │        │
+  GP4  NCS3 ──────────────────────► Board 3   │        │
+  GP5  NCS4 ───────────────────────────────► Board 4    │
+  GP6  NCS5 ────────────────────────────────────────► Board 5
+  GND ─────────────── common GND ──────────────────────────────
+External 3.3 V rail (≥1.5 A) ─► J1-1 of each board (star or bus, short, heavy copper)
+```
+
+Each board's J1 is 1×6: 1 = 3V3_EXT, 2 = GND, 3 = SCLK, 4 = MOSI, 5 = MISO, 6 = NCS (this board's line). INT is not routed in this design; poll with `check_data_ready()` (five INT lines would cost five more GPIOs).
+
+---
+
+## 3. C. Host board compatibility report: Waveshare RP2350-Zero Mini
+
+### 3.1 Board facts
+
+| Item | Value | Tag |
+|---|---|---|
+| MCU | RP2350A, dual Cortex-M33 or dual Hazard3 RISC-V, up to 150 MHz, 520 KB SRAM, 4 MB flash | [V Waveshare via Core Electronics] |
+| GPIO | 29 multi-function GPIO; 20 on the edge pinout, the rest on solder points | [V] |
+| Peripherals | 2×SPI, 2×I²C, 2×UART, 4×12-bit ADC, 24 PWM, 12 PIO SMs | [V] |
+| Regulator | ME6217C33M5G LDO, **800 mA max** | [V] |
+| LED | One WS2812, data on **GP16** | [V Zephyr board files, secondary] |
+| USB | Type-C, USB 1.1 device/host | [V] |
+| Pad GPIOs in Zephyr header map | GP0–GP22, GP26–GP29 | [S] |
+| Which GPIOs are on the 20 edge pins | Not stated in text; **assumed GP0–GP15 and GP26–GP29** | **[U]** |
+
+### 3.2 Pin count check
+
+Needed: 3 shared SPI + 5 NCS = **8 GPIO**. Available on the edge (assumed): 20. Pass, with 12 spare. GP16 (WS2812) is not used.
+
+### 3.3 Power budget: RP2350 + 5 sensors vs. the 800 mA LDO
+
+**Sensor load (3.3 V rail), from Rev 1 Table 14 [V Rev 1]**
+- Per board: peak 150 mA; typical 43 + 50 = 93 mA (AVDD 43/50, CORE_1V8 50/80, +10 mA each peak).
+- Five boards: peak 5 × 150 = **750 mA**; typical 5 × 93 = **465 mA**.
+- Pull-ups, shifters, R7: < 3 mA total (R7 sinks up to 0.7 mA per board only while NCS is low). Neglected.
+
+**Host load (assumption, [U], measure):** RP2350 at 150 MHz, flash, USB and idle LED ≈ 40 mA. Upper bound with the WS2812 at full white ≈ 100 mA (the LED alone ~60 mA [U]).
+
+**Budget against the onboard LDO (800 mA)**
+
+| Case | Load | Margin to 800 mA |
+|---|---|---|
+| Peak, LED off | 750 + 40 = **790 mA** | **10 mA (1.3 %)** |
+| Peak, LED on | 750 + 100 = 850 mA | **−50 mA (over rating)** |
+| Typical, LED off | 465 + 40 = **505 mA** | 295 mA (63 % of rating) |
+
+**Dissipation at 5 V in** (linear LDO: input current ≈ output current)
+- Typical: (5.0 − 3.3) × 0.505 = **0.86 W**
+- Peak: (5.0 − 3.3) × 0.79 = **1.34 W**
+- ME6217C33M5G is a SOT-23-5 part (the "M5" suffix, [U]). I did not retrieve its power-dissipation or θJA figure; SOT-23-5 LDOs are usually rated for a few tenths of a watt [U]. Even at the typical case the dissipation is likely 2× or more above what the package can shed. **Check the Microne datasheet before relying on this, but the conclusion does not depend on it** (next point).
+
+**USB budget:** the LDO input comes from VBUS (USB-C). Peak input ≈ 790 mA; typical ≈ 505 mA. A USB 2.0 port allows 500 mA after enumeration (100 mA before) [standard, U for this board's negotiation behaviour].
+
+**Verdict: the margin is too narrow, and the design fails on three independent counts** (current margin 1.3 %, thermal dissipation, USB current). The summed peak is conservative (five sensors need not peak simultaneously), but the typical case alone already consumes 63 % of the LDO rating and all of the USB allowance, and the design should not depend on staggering.
+
+### 3.4 Recommended power architecture (mandatory)
+
+1. **RP2350-Zero Mini powered from USB-C only.** Its onboard LDO supplies only the RP2350 and its own logic (≈ 40–100 mA).
+2. **Sensor boards powered from a separate external 3.3 V rail,** feeding J1-1 on all five boards.
+   - Rating: ≥ 1.5 A (2× the 750 mA peak). Regulation 3.3 V ± 3 % (AVDD window 3.13–3.47 V [V Rev 1]) at the boards, so allow for harness drop: 150 mA × ~0.1 Ω ≈ 15 mV per board path.
+   - Use a **buck (switching) 3.3 V converter from a separate ≥ 5 V, ≥ 2 A source, not a linear regulator.** A 5→3.3 V linear regulator would burn (5 − 3.3) × 0.465 ≈ 0.8 W typical.
+   - **Do not source this converter from the RP2350's USB VBUS** if the host PC is the supply: peak 3.3 V × 0.75 A / (5 V × ~0.9) ≈ 0.55 A exceeds 500 mA. Use a wall supply.
+   - Add ≥ 47 µF bulk near the distribution point; each board already has C1 4.7 µF and C6 2.2 µF.
+3. **Common ground:** connect external-rail GND to the RP2350 GND at one point.
+4. **Never connect the external 3.3 V rail to the RP2350's 3V3 pin.** Two regulators on one node can back-feed the ME6217 or fight.
+5. **Sequencing:** **not** any order — R7 breaks this (see §2.4). Below 100 mV on either VCC the AXC outputs go Hi-Z and Ioff gives partial power-down protection [V TI features], but R7 is a resistor path that Ioff does not cover. With the host on and the rail off, R7 back-feeds the rail; with the rail on and the host off, R7 back-feeds the RP2350 pads. Fix R7 (host-side pull-up or a host-controlled load switch on 3V3_EXT) before relying on this item.
+6. **VCCB is the external 3.3 V rail** and the RP2350 outputs are nominally 3.3 V from a different regulator. AXC inputs tolerate up to 3.6 V [V Rev 1]; the two 3.3 V rails differ by a few percent at most.
+
+### 3.5 Performance
+
+150 MHz is more than enough for 3 MHz SPI. The limit is the 3 MHz sensor SPI clock, not the host. Firmware download is ~84 KB per sensor, ≈ 0.23 s at 3 MHz [calc], ≈ 1.2 s for five sensors in sequence, plus sensor boot time [U].
+
+### 3.6 SPI pin mapping on the RP2350-Zero Mini
+
+SPI1 is used (SPI0's default pins in Zephyr are GP20–GP23, which are pad-only [S]).
+
+| Signal | RP2350 GPIO | Function on RP2350 | J1 pin (each board) | Notes |
+|---|---|---|---|---|
+| SCLK | **GP10** | SPI1 SCK | 3 | shared |
+| MOSI | **GP11** | SPI1 TX | 4 | shared |
+| MISO | **GP12** | SPI1 RX | 5 | shared, no internal pull on the pad |
+| NCS1 | **GP2** | GPIO output | board 1, pin 6 | idle high |
+| NCS2 | **GP3** | GPIO output | board 2, pin 6 | |
+| NCS3 | **GP4** | GPIO output | board 3, pin 6 | GP4/GP5 are default I²C0 in Zephyr, unused here |
+| NCS4 | **GP5** | GPIO output | board 4, pin 6 | |
+| NCS5 | **GP6** | GPIO output | board 5, pin 6 | |
+| Spare | GP0, GP1, GP7–GP9, GP13–GP15, GP26–GP29 | | | GP0/GP1 = UART0 for debug |
+| 3V3_EXT | external supply | | 1 | **not** the RP2350 3V3 pin |
+| GND | common | | 2 | |
+
+SPI1 pin legality (RX 8/12, SCK 10/14, TX 11/15) is the standard RP2040/RP2350 function table [U from memory; the Arduino-Pico `setRX/setTX/setSCK` call will reject an illegal combination]. **Check the physical positions of GP2–GP6 and GP10–GP12 against Waveshare's pinout image before you route the harness.** Alternatives: SPI1 SCK GP14, TX GP15, RX GP12.
+
+---
+
+## 4. D. Regulator comparison (1.8 V only; host LDO noted)
+
+Variant B parts (TPS7A2033, TLV755P-3.3) are deleted. The 1.8 V rail per board carries ~90 mA peak (CORE_1V8 80 + 10 mA [V Rev 1]).
+
+| Part | Package | Iout | Start-up | θJA | Verdict |
+|---|---|---|---|---|---|
+| **MIC5504-1.8YMT** (Microchip) | 4-pin DFN 1.0×1.0 | 300 mA | **50 µs typ / 125 µs max** [V Rev 1, DS20006006C] | 250 °C/W [V Rev 1] | **Chosen, but does NOT guarantee the 58 µs rule at max (125 µs); typ 50 µs is only ~14 % under.** See §4 caveat. |
+| LDK130M18R (ST) | DFN6 1.2×1.3 | 300 mA | not documented in what I retrieved | n/a | Fallback; used on ST's SATEL-VL53L8 [V Rev 1]. |
+| TPS7A2018 (TI) | X2SON-4 | 300 mA | ~750 µs typ [S/U] | 166.1 °C/W (DQN) | Only if a scope shows ≤58 µs (it does not: 750 µs typ). |
+| *Host:* ME6217C33M5G | SOT-23-5 [U] | **800 mA** | n/a | not retrieved | Powers the RP2350 only (§3.4). |
+
+- Input is the board's 3V3 (external rail), **EN tied to IN — this is a problem, see below.**
+- Dissipation per board: (3.3 − 1.8) × 0.09 = **135 mW**; rise ≈ 34 °C at 250 °C/W (Rev 1). At +85 °C ambient that is ~119 °C against the 125 °C limit: acceptable, scope it. Five boards each carry their own, so no shared-thermal issue.
+- **⚠ Rev 3 (round-2 review):** with EN = IN the LDO output follows the 3V3_EXT ramp until it regulates. A buck with ms-scale soft-start (3.3 V over 1 ms = 0.0033 V/µs) violates the 0.012 V/µs CORE_1V8 minimum on its own, and the MIC5504's own 125 µs max exceeds the 58 µs limit. Fix: drive EN from a delayed/power-good signal so the LDO starts after 3V3 is stable, and choose an external supply with ≤ ~3 ms soft-start (AVDD limit 0.001 V/µs). Scope CORE_1V8 on every board.
+
+---
+
+## 5. E. Level-shifter comparison and the OE modification
+
+### 5.1 U3: SN74AXC4T774 (RSV UQFN-16), SCLK / MOSI / MISO only
+
+| Aspect | Rev 1 | Rev 2 |
+|---|---|---|
+| OE (pin 7) | GND | **NCS_S** (1.8 V, from U5) |
+| Channels used | 4 (SCLK, MOSI, NCS, MISO) | **3** (SCLK, MOSI, MISO) |
+| Channel 3 (A3 pin 3 / B3 pin 10) | NCS | **Idle:** B3 → GND, A3 not connected, DIR3 → GND. The channel is driven deterministically low and nothing reads it. |
+| MISO behaviour when unselected | Driven low by internal pull-down (the contention case) | **Hi-Z** (OE high) |
+
+Alternatives for the OE→NCS_S requirement:
+- A separate 74xx125-type buffer only on MISO [S, forum suggestion]: more parts per board than adding U5.
+- Merging MISO through a mux: overkill [S].
+
+### 5.2 U5: SN74AXC1T45 (new), NCS only
+
+| Pin | Name | Connection |
+|---|---|---|
+| 1 | VCCA | 1V8 (+ C8 100 nF) |
+| 2 | GND | GND |
+| 3 | A | **NCS_S** (to U1.C2, R1, U3 pin 7) |
+| 4 | B | **NCS_H** (J1-6, R7) |
+| 5 | DIR | GND (B→A: host to sensor) |
+| 6 | VCCB | 3V3 (+ C9 100 nF) |
+
+Pin numbers [V TI SCES882E Table 4-1]. DIR low = B→A [V]. Package: DCK (SC70-6) preferred for size, DBV (SOT-23-6) easier to hand-solder; orderable suffix to confirm at the distributor [U]. Propagation delay and DIR reference rail: not retrieved [U].
+
+### 5.3 Bus-level notes
+- Enable time of U3 after NCS_S falls is nanoseconds-to-tens-of-ns [U, not retrieved]; the host's first SCLK edge follows NCS by ≥ ~1 µs when NCS is a software GPIO, so margin is large. Do not drive NCS with a hardware CS that asserts within a few ns of the first clock.
+- Five AXC inputs on SCLK and MOSI: ~few pF each [U]; at 3 MHz with ≲ 20 cm total wire this is fine. Keep SCLK away from MISO. Optional 22 Ω series resistors at the RP2350 end of SCLK and MOSI (host side, one set only) if ringing appears (TI warns the AXC drive can ring on light loads [V Rev 1]).
+- The five idle MISO outputs are Hi-Z (OE high). If their internal pull-downs stay on in Hi-Z [U], the host sees ≈ 71 kΩ / 5 ≈ 14 kΩ to GND on MISO while no board is selected; the selected shifter drives that without difficulty (≈ 0.23 mA at 3.3 V).
+
+---
+
+## 6. F. Firmware and library compatibility
+
+### 6.1 Findings from the search (2026-11-02)
+
+| Question | Finding | Tag |
+|---|---|---|
+| STM32duino VL53L8CX exists and is maintained | GitHub `stm32duino/VL53L8CX`, BSD-3-Clause, based on ULD SDK v1.3.0, 42 commits on main, **no GitHub releases listed**. Examples: `VL53L8CX_Sat_HelloWorld_I2C`, `…_SPI`, `VL53L8CX_ThresholdsDetection`. | [V] |
+| Architecture claim | Arduino reference: "This library is compatible with all architectures." | [V] |
+| RP2040 / RP2350 evidence | **None.** The README does not mention RP2040, RP2350 or Pico. Examples are written for ST's SATEL board on a Nucleo. | [V] (absence) |
+| Evidence of SPI problems on non-STM32 cores | An ST Community thread (Arduino Portenta H7) shows the example's `SPIClass DEV_SPI(MOSI, MISO, SCK)` failing to compile: "no matching function for call to `arduino::HardwareSPI::HardwareSPI(int, int, int)`". The only reply was "file an issue", with no fix. | [V] |
+| Pololu | Its VL53L8CX carrier post recommends an RP2040-class board but **names no Arduino library**. A commenter reported SPI support lacking and failure on a Pi 4, while ESP32 worked (user report, not Pololu). | [V]/[S] |
+| Arduino-Pico supports the board | The README lists "Waveshare RP2350 Zero" under Supported Boards and says the core covers "all RP2040 and RP2350 boards". | [V] |
+| Waveshare's own instructions | Wiki: add the Arduino-Pico index URL (v4.5.2 shown), install "Raspberry Pi Pico/RP2040/RP2350", then choose a Pico model such as Raspberry Pi Pico 2. It does **not** name a separate Zero entry. This conflicts mildly with the README list. | [V] |
+
+**Conclusion.** The library's "all architectures" label is **not evidence** that SPI works on RP2350. The Portenta failure points to a likely trap on ArduinoCore-API cores (`SPIClass` is an abstract `HardwareSPI`, so the library cannot construct one). Arduino-Pico is also ArduinoCore-API-based [U], so the code below passes a **pointer to the ready-made `SPI1` object** and never constructs an SPIClass. **Status: unproven until one board ranges on your RP2350-Zero.** Fallbacks, in order: (1) patch the library's platform layer; (2) port ST's ULD `Platform` SPI functions yourself (as Rev 1 §3 already assumed for Teensy; UM3109 §3.1 [V Rev 1]).
+
+### 6.2 Arduino-Pico core setup
+
+Arduino IDE
+1. Preferences → Additional Boards Manager URLs: `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json` [V].
+2. Install "Raspberry Pi Pico/RP2040/RP2350".
+3. Tools → Board: **"Waveshare RP2350 Zero"** if listed (README says supported); otherwise "Raspberry Pi Pico 2". The Mini-specific entry and exact board IDs are **[U]**.
+4. First upload: hold BOOT while plugging in (UF2 drive appears), as on the Waveshare wiki [V].
+
+PlatformIO (pattern verified for the original Pico; the RP2350 board ID is **[U]**)
+```ini
+[env:rp2350zero]
+platform = https://github.com/maxgerhardt/platform-raspberrypi.git
+framework = arduino
+board = rpipico2            ; [U] fallback ID; a waveshare_rp2350_zero ID may exist, check the platform's boards list
+board_build.core = earlephilhower
+monitor_speed = 115200
+lib_deps = stm32duino/STM32duino VL53L8CX   ; [U] exact registry name
+```
+`board_build.core = earlephilhower` and the maxgerhardt platform URL come from the Arduino-Pico PlatformIO docs [V]; those docs do not mention RP2350.
+
+### 6.3 Five-sensor polling sketch (continuous mode)
+
+**Read this before compiling.** I could not retrieve `vl53l8cx.h` (GitHub raw/blob URLs were blocked in this session). The constructor signature and method names below follow the pattern of the STM32duino examples **from memory and are [U]**. The task text uses `check_data_ready()`, consistent with it. Confirm every call against `src/vl53l8cx.h`. In particular verify (a) the SPI constructor argument order, (b) whether `lpn_pin = -1` is accepted (LPn is pulled to IOVDD on the board, with no host line), (c) the SPI clock default (must be ≤ 3 MHz, mode 3), (d) the return types of `begin()`/`init()`.
+
+```cpp
+// 5x VL53L8CX on a shared SPI1 bus, one NCS GPIO per board.  RP2350-Zero Mini, Arduino-Pico core.
+// Hardware: each board's SN74AXC4T774 (U3) has OE tied to that board's NCS_S.  NCS_S comes from
+// U5 (SN74AXC1T45), so NCS low = board selected = U3 enabled; NCS high = U3 Hi-Z (MISO released).
+#include <Arduino.h>
+#include <SPI.h>
+#include <vl53l8cx.h>                       // STM32duino VL53L8CX  [API names: verify against header]
+
+constexpr uint8_t  NUM_SENSORS   = 5;
+constexpr uint8_t  PIN_SCK       = 10;      // SPI1 SCK
+constexpr uint8_t  PIN_MOSI      = 11;      // SPI1 TX
+constexpr uint8_t  PIN_MISO      = 12;      // SPI1 RX
+constexpr uint8_t  NCS_PINS[NUM_SENSORS] = {2, 3, 4, 5, 6};
+constexpr uint32_t SPI_HZ        = 3000000; // sensor limit: 3 MHz, mode 3 (DS14161 Table 8)
+constexpr uint8_t  RANGING_HZ    = 15;      // per sensor, 8x8
+constexpr uint8_t  CENTER_ZONE   = 27;      // one of the four central zones of the 8x8 grid
+
+VL53L8CX*            sensors[NUM_SENSORS];
+VL53L8CX_ResultsData results;               // reused buffer; 64 zones
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial && millis() < 3000) {}
+
+  // 1) FIRST: park every NCS high so no board is selected (all U3 Hi-Z, MISO bus idle).
+  //    R7 on each board already holds NCS high at reset; this keeps it high in firmware.
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    pinMode(NCS_PINS[i], OUTPUT);
+    digitalWrite(NCS_PINS[i], HIGH);
+  }
+
+  // 2) Shared bus. Pass a pointer to the existing SPI1 object. Do NOT construct an SPIClass
+  //    (that is the call that fails on ArduinoCore-API cores, see the Portenta thread).
+  SPI1.setSCK(PIN_SCK);
+  SPI1.setTX(PIN_MOSI);
+  SPI1.setRX(PIN_MISO);
+  SPI1.begin();
+
+  // 3) Create, initialise and start each sensor one at a time.
+  //    Each init downloads ~84 KB over SPI: about 0.23 s per sensor at 3 MHz.
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    sensors[i] = new VL53L8CX(&SPI1, NCS_PINS[i], -1 /*LPn: pulled up on board*/, -1 /*no I2C reset*/);
+    sensors[i]->begin();
+    // Inside every transaction the library drops NCS_i. That falls on NCS_S, enables U3 (OE low),
+    // and connects this sensor's MISO to the shared bus. When NCS returns high, U3 goes Hi-Z.
+    if (sensors[i]->init() != 0) {                    // [verify return convention]
+      Serial.printf("sensor %u: init FAILED\n", i);
+      continue;                                       // leave this one out; others keep running
+    }
+    sensors[i]->set_resolution(VL53L8CX_RESOLUTION_8X8);
+    sensors[i]->set_ranging_frequency_hz(RANGING_HZ);
+    sensors[i]->start_ranging();                      // continuous mode
+    Serial.printf("sensor %u: ranging at %u Hz\n", i, RANGING_HZ);
+  }
+}
+
+void loop() {
+  for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+    if (sensors[i] == nullptr) continue;
+
+    uint8_t ready = 0;
+    // "Selecting" sensor i = NCS_i low for the duration of this call. The hardware link
+    // OE(U3) = NCS_S(i) enables ONLY this board's shifter, so exactly one MISO driver is active.
+    sensors[i]->check_data_ready(&ready);
+
+    if (ready) {
+      sensors[i]->get_ranging_data(&results);         // NCS_i low again for this transfer
+      // distance_mm is indexed [zone * VL53L8CX_NB_TARGET_PER_ZONE + target]
+      int16_t mm = results.distance_mm[VL53L8CX_NB_TARGET_PER_ZONE * CENTER_ZONE];
+      Serial.printf("S%u zone%u: %d mm (status %u)\n", i, CENTER_ZONE, mm,
+                    results.target_status[VL53L8CX_NB_TARGET_PER_ZONE * CENTER_ZONE]);
+    }
+  }
+  delay(2);   // poll faster than the 15 Hz frame rate; each poll is a short SPI transaction
+}
+```
+
+Notes on the sketch
+- **NCS handling is inside the library** in my recollection of its platform layer [U]. If it turns out the library does not toggle NCS, wrap each call in `digitalWrite(NCS_PINS[i], LOW)` / `HIGH` yourself and add `delayMicroseconds(1)` after the falling edge so U5 and U3's OE have settled.
+- Do not enable an internal pull on MISO or on NCS pads. **RP2350-E9:** a weak-input pad with the input buffer enabled can sit near mid-rail on early silicon. CNX Software reports the A4 stepping fixes E9 (parts marked RP2350A0A4 / RP2350B0A4); the failure mode and the A2 workaround were not retrieved [S]. Check the stepping on your Zero Mini; if it is A2, add a defined bias on MISO_H at the host (pull-up to 3V3, per the E9 text) and verify against the RP2350 datasheet.
+- RAM: five driver contexts plus result buffers are a few kB each [U], trivial against 520 KB.
+- Add `Serial` timing output the first time and confirm no frame is dropped at 5 × 15 Hz.
+
+---
+
+## 7. G. Final BOM and pin tables
+
+### 7.1 BOM per carrier board (×5 identical; passives ≥ 0402)
+
+| Ref | Part | Package | Purpose | Qty/board |
+|---|---|---|---|---|
+| U1 | VL53L8CXV9GC/1 (no liner) or V0GC/1 (liner) | LGA16 6.4×3.0×1.75 | Sensor | 1 |
+| U2 | MIC5504-1.8YMT | 4-pin DFN 1.0×1.0 | 1.8 V → CORE_1V8 + IOVDD + VCCA of U3, U5 | 1 |
+| U3 | SN74AXC4T774RSVR | UQFN-16 2.6×1.8 | SCLK / MOSI / MISO translator, **OE = NCS_S** | 1 |
+| **U5 (new)** | SN74AXC1T45 (DCK SC70-6 or DBV SOT-23-6; suffix to confirm) | SC70-6 / SOT-23-6 | **NCS translator** (host → sensor) | 1 |
+| C1 | 4.7 µF X5R 10 V | 0402 | AVDD at C4 (check DC-bias derating, else 0603) | 1 |
+| C2 | 100 nF | 0402 | CORE_1V8 at B7 | 1 |
+| C3 | 100 nF | 0402 | IOVDD at A3 | 1 |
+| C4 | 100 nF | 0402 | U3 VCCA | 1 |
+| C5 | 100 nF | 0402 | U3 VCCB | 1 |
+| C6 | 2.2 µF X5R 10 V | 0402 | 3V3 at U2 input | 1 |
+| C7 | 1 µF X5R 10 V | 0402 | U2 output | 1 |
+| **C8 (new)** | 100 nF | 0402 | U5 VCCA | 1 |
+| **C9 (new)** | 100 nF | 0402 | U5 VCCB | 1 |
+| R1 | 47 kΩ | 0402 | NCS_S → IOVDD | 1 |
+| R2 | 47 kΩ | 0402 | INT → IOVDD | 1 |
+| R3 | 47 kΩ | 0402 | SYNC → IOVDD | 1 |
+| R4 | 47 kΩ | 0402 | LPn → IOVDD | 1 |
+| R5 | 47 kΩ | 0402 | SPI_I2C_N → IOVDD | 1 |
+| **R6 (new)** | 6.8 kΩ | 0402 | SCLK_S → 1V8 (no spurious edge on selection, §2.3; idle 1.64 V vs 71 kΩ internal pull-down) | 1 |
+| **R7 (new)** | 4.7 kΩ | 0402 | NCS_H → 3V3 (hold deselected at host reset, §2.4) | 1 |
+| J1 | 1×6 header, 2.54 mm | THT | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS | 1 |
+| | **SMD parts** (U1–U3, U5, C1–C9, R1–R7) | | | **20** |
+
+**Whole system:** 5 × 20 = **100 SMD parts**, 5 headers, the **Teensy 4.0** and the external 3.3 V supply.
+
+**System BOM (outside the carriers, Rev 5):**
+
+| Ref | Part | Value / notes | Qty |
+|---|---|---|---|
+| U10 | Load switch, TPS22918-class | ≥ 1.5 A, 3.3 V; **CT open** (t_R ≈ 95 µs). One switch feeds all five carriers | 1 |
+| R10 | 100 kΩ 0402 | ON pin → GND. The rail must default **off**; the datasheet does not state an internal pull-down | 1 |
+| C10 | 22 µF 0603 | at the switch VIN. IR-drop reservoir: ~0.43 Ω round trip of 28 AWG × 750 mA ≈ 0.32 V of far-end sag on a load step | 1 |
+| C11 | 1 µF 0402 | at the switch VOUT (datasheet C_OUT minimum) | 1 |
+| — | Bulk ≥ 47 µF | **upstream** of the switch, at the regulator, next to the star point | 1 |
+
+Optional, not counted: R8 47 kΩ MOSI_S → 1V8 (if the sensor's MOSI input is seen to float while deselected, [U]); 22 Ω series resistors at the host end of SCLK/MOSI; a 5 V TVS at the harness connector (bench-only, not required).
+
+**Removed from Rev 1:** U4 (3.3 V LDO), C8 (5 V input, old numbering), all Variant B text, the Rev 1 "OE tied to GND" and "MISO pull-down redundant" statements.
+
+### 7.2 Sensor pin table (SPI mode), per board
+
+| Pin | Name | Connection |
+|---|---|---|
+| A1 | GPIO1 / INT | R2 47 kΩ to 1V8 (not routed to the host) |
+| A2 | LPn | R4 47 kΩ to 1V8 |
+| A3 | IOVDD | 1V8, C3 |
+| A4 | SDA/MOSI | U3 A2 (MOSI_S) |
+| A5 | SCL/MCLK | U3 A1 (SCLK_S), **R6 to 1V8** |
+| A6, A7, C6 | RSVD1–3 | GND |
+| B1 | GPIO2 / SYNC | R3 47 kΩ to 1V8 |
+| B4 | THERMALPAD | GND, 8 vias |
+| B7 | CORE_1V8 | 1V8, C2 |
+| C1 | SPI_I2C_N | R5 47 kΩ to 1V8 |
+| C2 | NCS | **U5 pin 3 (NCS_S)**, R1 to 1V8 |
+| C3, C7 | GND | GND |
+| C4 | AVDD | 3V3, C1 |
+| C5 | MISO | U3 A4 (MISO_S) |
+
+(Pin numbers [V Rev 1, DS14161 Table 3].)
+
+---
+
+## 8. H. Final netlist (per board)
+
+**Power**
+- `3V3_EXT` (J1-1) → net `3V3` → C1 (at U1.C4), U1.C4 (AVDD), U2.IN with C6 and **EN = IN**, U3.VCCB (pin 13) with C5, U5.VCCB (pin 6) with C9, R7. **Rev 5:** EN = IN stays; the rail is switched by the system load switch (§7 system BOM), whose ON pin is driven by **Teensy pin 2** (`RAIL_EN_PIN`, asserted in `setup()` before any CS/NCS is driven). There is no per-board EN network.
+- U2 (MIC5504-1.8): OUT = `1V8` with C7.
+- `1V8` feeds U1.A3 (with C3), U1.B7 (with C2), U3.VCCA (pin 14, with C4), U5.VCCA (pin 1, with C8), R1–R6.
+- MIC5504 pin numbers: per Microchip DS20006006C [U, not retrieved].
+
+**U3 SN74AXC4T774 (RSV; pin numbers [V Rev 1, SCES898C Table 4-1])**
+
+> **Rev 3 (round-3 review): resolved as consistent.** A second SCES898C mirror (pdf.elecfans.com) gives RSV as VCCA=14, VCCB=13, GND=8, OE=7, A1–A4=1–4, B1=12, B2=11, B3=10, B4=9, DIR1/2=15/16, DIR3/4=5/6 — this matches the netlist below. The earlier conflict came from a mis-fetched table. **Still confirm on TI's own pinout figure before layout** (the mirror is secondary).
+
+| Pin | Function | Connection |
+|---|---|---|
+| 14 | VCCA | 1V8 |
+| 13 | VCCB | 3V3 |
+| 8 | GND | GND |
+| 7 | **OE** | **NCS_S** (active-low enable; high = Hi-Z) |
+| 1 | A1 | SCLK_S → U1.A5 |
+| 2 | A2 | MOSI_S → U1.A4 |
+| 3 | A3 | **not connected** (idle channel) |
+| 4 | A4 | MISO_S ← U1.C5 |
+| 12 | B1 | SCLK_H (J1-3) |
+| 11 | B2 | MOSI_H (J1-4) |
+| 10 | B3 | **GND** (idle channel input) |
+| 9 | B4 | MISO_H (J1-5) |
+| 15, 16 | DIR1, DIR2 | GND (B→A: host to sensor) |
+| 5 | DIR3 | GND (B→A: A3 driven low by B3, unused) |
+| 6 | DIR4 | 1V8 (A→B: sensor to host) |
+
+**U5 SN74AXC1T45:** pin 1 VCCA = 1V8; pin 2 GND; pin 3 A = NCS_S; pin 4 B = NCS_H (J1-6, R7 to 3V3); pin 5 DIR = GND; pin 6 VCCB = 3V3 [V Table 4-1]. **DIR = GND ⇒ B→A (B port output), i.e. the 3.3 V host side drives the 1.8 V sensor side — exactly what the design needs** [V SCES882E function table]. **⚠ SCES882E pin numbers are still unverified; confirm on TI's package figure before layout.**
+
+**Nets that changed from Rev 1:** `NCS_S` now has four connections: U5 pin 3, U1.C2, R1, **U3 pin 7**. `NCS_H` connects only J1-6, U5 pin 4 and R7. `SCLK_S` adds R6.
+
+**System harness (Teensy 4.0, Rev 4):** Mode A — SCLK_H, MOSI_H, MISO_H joined across all five J1 pins 3/4/5 and to Teensy pins **13 / 11 / 12**; each J1-6 to its own CS pin (**10, 9, 8, 7, 6**); J1-1 all to the switched external 3.3 V rail; J1-2 all to the common GND (also to Teensy GND). Mode B adds SPI1 (27/26/1, CS 0), SPI2 (37/35/34, CS 36) and Wire/Wire1 — see §13.3.
+
+---
+
+## 9. I. Documentation
+
+### 9.1 Timing
+- Rev 1 results hold per board: AXC delay ≤ 5 ns (host→sensor) and ≤ 7 ns (MISO) at 1.8/3.3 V [V Rev 1]; MISO path ≈ 27 ns vs a 167 ns half-period at 3 MHz.
+- New: U5 adds its own delay to NCS (not retrieved, ns-scale [U]); OE enable time of U3 after NCS_S falls (not retrieved [U]). Both are small against a ≥ 1 µs software NCS-to-clock gap.
+
+### 9.2 Layout and thermal (per board)
+- Rev 1 rules unchanged: decoupling within a few mm, shifter next to the sensor, 8 thermal vias, bottom mask open and one paste aperture [V Rev 1, AN5897], 1.8 V LDO in a copper pour.
+- Keep **NCS_S short** and away from SCLK_S: it drives U3's OE and the sensor.
+- Put U5 beside U3 so NCS_S is a few mm long.
+- Bus wiring: daisy-chain SCLK/MOSI/MISO; keep total ≲ 20 cm; ground return alongside each line; a ground wire per board.
+- External rail: heavy copper or wire, one star point near the supply, ≥ 47 µF bulk there. Peak 750 mA at 3.3 V ≈ 2.5 W; use ≥ 1.5 A rated connectors.
+
+### 9.3 Power and thermal summary (system)
+- Sensor power ≈ 215 mW typ / 320 mW max per sensor [V Rev 1, AN5897]; five sensors: 1.1 W typ / 1.6 W max, **sensor-only**.
+- **The external rail carries more than the sensors:** it also feeds the five 1.8 V LDOs. Rail-side: 465 mA typ × 3.3 V ≈ 1.5 W typ, 750 mA peak × 3.3 V ≈ 2.5 W peak. Size the supply and connectors from these numbers, not the sensor-only figure.
+- **Teensy 4.0:** ≈ 0.13 W (40 mA × 3.3 V) from its own USB-side regulator. Comfortable. Its 3.3 V pin (~250 mA) is **not** used by the carrier.
+- **Load switch drop:** ≤ 78 mΩ × 0.75 A ≈ 59 mV peak; 22 µF at VIN plus ≥ 47 µF upstream at the regulator.
+- External buck at 3.3 V, 0.75 A peak, ~90 % efficient: ≈ 0.28 W loss.
+
+### 9.4 Optical integration and handling
+AN5939 Rev 3 Table 5 [V]: air gap + glass < 1.5 mm; air gap < 0.5 mm without a gasket; gasket needed above 0.7 mm; crosstalk ≤ 300 kcps/SPAD; emitter and receiver 4 mm apart. MSL 3, 25 N maximum, Class 1 laser. **Reflow: DS14161 Rev 12 Table 24 (p. 38) gives 240 °C recommended / 260 °C maximum, 3 passes, convection only — not vapour phase.** **No wet cleaning or coating:** the supporting statement is in the PCB manufacturing guidelines (washing and coating not recommended), **not** TN1532 (the provided TN1532 is a liquid-level note). Five sensors on one assembly: keep **adjacent sensors' fields of view from overlapping** (multi-emitter crosstalk is not characterized here [U]; the sensor emits at 940 nm and sensors share no sync line in this design). **If a cover glass is used, the firmware must call `calibrate_xtalk` / `set_caldata_xtalk`.**
+
+### 9.5 Firmware notes
+- Calibration: run per-unit crosstalk calibration with a target ≥ 600 mm [V Rev 1, UM3109 §3.2].
+- Hardware reset: no host reset line to the sensors. **The 3V3_EXT load switch is the reset** — it drops AVDD and CORE_1V8 together, as DS14161 requires. `vl53l8cx_init()` begins with a software reboot (verified in `vl53l8cx_api.c`), so a re-init recovers a running sensor; a hung sensor needs the rail cycle.
+- Never apply 5 V to IOVDD. Never apply more than 1.98 V to CORE_1V8/IOVDD. All Teensy GPIO is 3.3 V and only meets sensor pins through U3/U5.
+
+---
+
+## 10. J. Design review checklist
+
+| Item | Status |
+|---|---|
+| Pin map matches DS14161 Table 3 | ✅ Pass |
+| IOVDD/CORE_1V8 ≤ 1.98 V, no 3.3 V on sensor I/O | ✅ Pass |
+| Five required pull-ups to IOVDD on every board | ✅ Pass |
+| SPI mode 3, ≤ 3 MHz, 40–60 % duty | ✅ Pass (verify the library default speed and mode) |
+| **U3 OE = NCS_S (active-low OE: NCS high → Hi-Z)** | ✅ Pass [V TI] |
+| **NCS does not pass through U3** (no OE deadlock); U5 produces NCS_S | ✅ Pass (design) |
+| U3 idle channel 3: B3 = GND, A3 NC, DIR3 = GND | ✅ Pass |
+| U3 DIR1/2/3 = GND, DIR4 = 1V8 | ✅ Pass |
+| R6 holds SCLK_S high when U3 is disabled | ⚠ Scope for a rising SCLK edge at selection |
+| R7 holds NCS_H high at host reset | ✅ Pass; scope it |
+| Only one MISO driver active at a time (scope MISO while cycling NCS1…5) | ⚠ Bench-check |
+| MISO idle level / loading with 4 deselected boards | ✅ Pass in theory — 71 kΩ typ internal pull-downs per shim [V SCES898C §7.3.9] → ≈14.2 kΩ across five boards; scope it |
+| **3V3_EXT load switch** (Rev 5): t_R ≤ 275 µs, ≥ 1.5 A, enable pull-down, bulk upstream | ⚠ **Bench:** measure t_R under the real 36.5 µF load (§13.10) |
+| LDO EN tied to IN | ✅ **Pass with the load switch** (§13.9): the switch's rise edge sets the 1.8 V ramp, so EN=IN is fine and no per-board EN network is needed |
+| 1.8 V rail meets 58.3 µs slew on every board | ⚠ **Open:** scope each board |
+| **Sensor array NOT on the Teensy 3.3 V pin (~250 mA)** | ✅ Pass (external rail mandatory) |
+| External 3.3 V ≥ 1.5 A, 3.3 V ± 3 % at each board | ⚠ Measure under peak load; ≤ 59 mV drop in the switch |
+| External rail GND tied to Teensy GND; rails never joined at 3V3 | ✅ Pass (design) |
+| Teensy powered from USB only; peak sensor load not on VBUS | ✅ Pass (design) |
+| Mode A pins 10,9,8,7,6 + 13/11/12 are header pins | ✅ Pass |
+| Mode B bottom pads (SPI1 26/27, SPI2 34–37) soldered | ⚠ Assembly check |
+| All three sketches compile for `teensy:avr:teensy40` | ✅ Pass (arduino-cli 1.5.1, teensy:avr 1.62.0) |
+| Host current measured with LED off and on | ⚠ Measure (assumed 40 / 100 mA) |
+| C1 4.7 µF 0402 derating at 3.3 V | ⚠ Confirm part, else 0603 |
+| Passives ≥ 0402 | ✅ Pass |
+
+**Residual risks**
+1. **OE/NCS scheme depends on U5 and R6/R7.** If you revert to a single shifter carrying NCS, the board cannot be selected (§2.1).
+2. **Library and SPI were unproven on the RP2350.** Moot: the host is a Teensy 4.0 (core 1.62.0) and all three sketches compile.
+3. **1.8 V rail slew** per board (Rev 1 main risk, unchanged; limit is 58.3 µs, not 63 µs). Superseded by the load-switch decision (§13.9).
+4. **Edge-pin assignment** of the GPIOs is moot (Teensy header map, §13.3).
+5. **U3/U5 pin numbers** — U3 matches a secondary SCES898C mirror (confirm on TI's figure); SCES882E was not retrieved; confirm both before layout (§8).
+6. **R7 back-feed** makes "any power-up order" false; the 3V3_EXT load switch is the fix (§13.9).
+5. **Worst-case current** assumes simultaneous 150 mA peaks; a real array may stay lower, but the supply should be sized for 750 mA.
+6. **Items I could not retrieve (Rev 5 status):** *resolved* — AXC4T774 tEN/tDIS (SCES898C §5.11: t_EN ≤ 26 ns, t_DIS ≤ 20 ns) and pull-down behaviour with OE high (71 kΩ static, §7.3.9); AXC1T45 DIR reference rail (VCCA); `vl53l8cx.h` constructor and API (all verified against the vendored source). *Still open, bench-only* — ME6217C33M5G dissipation/θJA, and the load switch's t_D at CT = 0 and reverse-current behaviour. Rev 1's list (TXU0304 pin map, TLV755P soft-start, etc.) no longer applies to this design except where noted.
+
+---
+
+## 11. Sources (accessed 2026-11-02)
+
+- TI SN74AXC4T774 datasheet SCES898C (overview, features): https://www.ti.com/document-viewer/SN74AXC4T774/datasheet/GUID-66FF1ECB-AEFD-4391-92BD-46B7CE45517F
+- TI SN74AXC1T45 datasheet SCES882E (pin table): https://www.ti.com/document-viewer/SN74AXC1T45/datasheet/GUID-84D9577C-A265-4B0B-BBDA-C8FED8AC9AB1
+- TI E2E, multiple AXC4T774 on one SPI bus: https://e2e.ti.com/support/interface-group/interface/f/interface-forum/1603441/sn74axc4t774-multiple-sn74axc4t774pwr-on-the-same-spi-bus
+- TI E2E, AXC4T774 multi-slave SPI: https://e2e.ti.com/support/logic-group/logic/f/logic-forum/1116877/sn74axc4t774-level-translation-with-multi-slave-spi
+- Waveshare RP2350-Zero wiki: https://www.waveshare.com/wiki/RP2350-Zero
+- Core Electronics, Waveshare RP2350-Zero Mini product text: https://core-electronics.com.au/waveshare-rp2350-zero-mini.html.plain.md
+- Zephyr RP2350-Zero board files (pin mapping, WS2812 on GP16): https://github.com/zephyrproject-rtos/zephyr/pull/97628/files
+- STM32duino VL53L8CX: https://github.com/stm32duino/VL53L8CX
+- Arduino library reference, STM32duino VL53L8CX: https://reference.arduino.cc/reference/en/libraries/stm32duino-vl53l8cx
+- ST Community, VL53L8CX on Portenta H7 (SPIClass error): https://community.st.com/t5/stm32-mcus-products/st-tof-vl53l8cx-and-arduino-portenta-h7-lite/td-p/713811
+- Pololu VL53L8CX carrier announcement: https://www.pololu.com/blog/949/new-product-vl53l8cx-time-of-flight-8x8-zone-distance-sensor-carrier
+- Arduino-Pico core README (supported boards, index URL): https://github.com/waltje/Arduino.Core-pico (mirror of earlephilhower/arduino-pico)
+- Arduino-Pico PlatformIO notes (mirror): https://gitea.unpythonic.net/adafruit-mirror/arduino-pico/raw/branch/qtpy-boot2-w25q080/docs/platformio.rst
+- Rev 1 sources (DS14161 Rev 11, UM3109, AN5897, AN5939, TN1532, Microchip DS20006006C): as cited in Rev 1, not re-opened today.
+
+---
+
+## 12. Rev 3 open items (round-2 and round-3 reviews)
+
+Status of the round-2 findings. Firmware items are fixed in `code/teensy4/`;
+hardware items are open until the documents below are checked.
+
+| # | Item | Status | Action |
+|---|---|---|---|
+| 1 | U3 (SN74AXC4T774 RSV) pin numbers conflict with SCES898C Table 4-1 | **Open** | Check the RSV\|16 pinout figure and package drawing in the PDF before layout. |
+| 2 | Static-array copy-init of `VL53L8CX` (self-pointers) | **Fixed** | In-place construction + pointer array in all sketches. |
+| 3 | Retry claimed but not implemented; `r` re-inits a live sensor | **Fixed** | Retry loop, periodic retry, demotion after 50 errors, `stop_ranging()` before re-init. |
+| 4 | 1.8 V slew: limit is 58 µs, MIC5504 max 125 µs, EN=IN | **Open** | Decouple EN from IN; supply soft-start ≤ ~3 ms; scope CORE_1V8. |
+| 5 | R7 back-feeds the dead rail / host | **Open** | Host-side pull-up or host-controlled load switch on 3V3_EXT. |
+| 6 | 4 KB stack frame in `IO_Read`/`IO_Write` | **Fixed** | `vl53l8cx_platform_config_custom.h` sets chunk 1024. |
+| 7 | NCS parked after the Serial wait | **Fixed** | `park_all_ncs_high()` is the first line of `setup()`. |
+| 8 | `five_sensor_array` stale CSV / flooding / wrong-sensor `g` | **Fixed** | Per-sensor buffers, stale timeout, print only on update. |
+| 9 | RP2350-E9 floating MISO (GP12) | **Open** | A4 stepping fixes E9 [S CNX]; check the Zero Mini stepping; if A2, bias MISO_H (pull-up to 3V3) per the E9 text. |
+| 10 | `#error` guard weaknesses | **Fixed** | `#ifndef` + `#if VL53L8CX_CS_SETTLE_US < 1 #error`. |
+| 11 | §9.3 power numbers were sensor-only | **Fixed** | Rail-side numbers added. |
+| 12 | Citation / assembly corrections | **Fixed** | Reflow 240/260 convection-only; no-wet-clean source corrected; AN5939 Table 5; xtalk calibration noted. |
+| 13 | Retry loop blocks healthy sensors | **Fixed** | 30 s period, one dead sensor per pass, after the poll. |
+| 14 | `stop_ranging()` on a never-started sensor | **Fixed** | `started[]` flag; only stops sensors that were started. |
+| 15 | Custom config replaced the default wholesale | **Fixed** | It now includes `vl53l8cx_platform_config_default.h`. |
+| 16 | No chunk-size override guard | **Fixed** | `#if VL53L8CX_COMMS_CHUNK_SIZE > 1024 #error` in every sketch. |
+| 17 | `IO_Read` reserved a full chunk of stack | **Fixed** | `data_write[2]` there; `IO_Write` keeps the full buffer. |
+| 18 | `five_sensor_poll` spammed errors | **Fixed** | Counts and demotes after 50 consecutive errors. |
+| 19 | README overstated the chunk cost | **Fixed** | Says ~2.7 ms per 1 KB chunk. |
+
+**Still needs documents:** SCES898C §5.11/§7.3.9 (tEN/tDIS, pull-down in Hi-Z), SCES882E (pin numbers, DIR rail), `vl53l8cx_api.c` (re-init behaviour), RP2350 datasheet (reset pad state, E9 workaround), Arduino-Pico stack size.
+
+---
+
+## 13. Host migration to Teensy 4.0 + dual-mode operation
+
+The host is changed from the Waveshare RP2350-Zero Mini to the **Teensy 4.0**
+(NXP i.MX RT1062, 600 MHz, 1024 KB RAM, 3.3 V I/O, not 5 V tolerant). The carrier
+is unchanged: it still shifts 3.3 V <-> 1.8 V (sensor IOVDD max 1.98 V) and the
+sensors still run from the external 3.3 V rail.
+
+### 13.1 Why the Teensy 4.0
+
+- **3 SPI ports** (LPSPI4, LPSPI3, LPSPI1) and **3 I2C ports** (LPI2C1, LPI2C3,
+  LPI2C4), all independent controllers [V PJRC spec page].
+- The six default pin sets do not overlap, so all can run at once [V core
+  headers]: SPI 10/11/12/13, SPI1 0/1/26/27, SPI2 34/35/36/37 (bottom pads),
+  Wire 18/19, Wire1 16/17 (alt 36/37), Wire2 24/25.
+- **3.3 V pin is limited to ~250 mA external** [V PJRC]. Five sensors peak at
+  750 mA, so the **external 3.3 V rail remains mandatory**. The carrier's J1
+  carries only `3V3_EXT`, which powers the shifter high side and the LDO; the
+  Teensy 3.3 V pin is not used by the carrier.
+
+### 13.2 Mode A — single bus, sequential
+
+All five sensors on **SPI** (SCK 13, MOSI 11, MISO 12), one CS each
+(10,9,8,7,6). These are all header pins (0–23). The carrier's OE->NCS_S scheme
+keeps exactly one board driving MISO, so sequential polling is safe.
+
+### 13.3 Mode B — 3 SPI + 2 I2C, concurrent
+
+One sensor per bus:
+
+| Sensor | Bus | SCK/SCL | MOSI/SDA | MISO | CS |
+|---|---|---|---|---|---|
+| S0 | SPI (LPSPI4) | 13 | 11 | 12 | 10 |
+| S1 | SPI1 (LPSPI3) | 27 | 26 | 1 | 0 |
+| S2 | SPI2 (LPSPI1) | 37 | 35 | 34 | 36 |
+| S3 | Wire (LPI2C1) | 19 | 18 | – | – |
+| S4 | Wire1 (LPI2C3) | 16 | 17 | – | – |
+
+- Each sensor owns a controller, so the five range **concurrently**; the MCU
+  drains each bus in turn. A slow I2C read does not stall the SPI sensors.
+- **S1 (26/27) and S2 (34–37) are on the bottom SMT pads**; only pins 0–23 are
+  breadboardable. S1's MISO/CS (1/0) are header pins.
+- One sensor per I2C bus means the default address **0x52** is kept on both; no
+  LPn-based address reassignment is needed.
+- I2C runs at **400 kHz** (Rev 4). With the trimmed ~320 B frame a frame read is
+  (4 × 9) + (320 × 9) = 2916 bits ≈ **7.3–7.4 ms**, so two I2C sensors plus three
+  SPI reads take ~17.6 ms of a 66.7 ms frame (≈26 % per I2C bus, counting the
+  per-pass `check_data_ready` polls). 1 MHz is no longer needed. The old "1 MHz is
+  required" claim was correct for the **untrimmed** 1444 B frame — 2 × 32.6 ms =
+  65.2 ms of 66.7 ms — and is obsolete after the output trim.
+
+### 13.4 Hardware deltas for Mode B (not yet drawn)
+
+1. **Bidirectional I2C translation.** The SN74AXC4T774 is unidirectional per
+   channel; SDA needs a bidirectional translator — the **TCA9406** (Fm+, VCCA
+   1.65–3.6 V, VCCB 2.3–5.5 V). A PCA9306 is **not** acceptable: TI specifies it
+   to 400 kHz only, and its internal pull-ups are not enough for a harness.
+2. **Sensor mode select.** `SPI_I2C_N` is pulled up (SPI). For I2C it must be
+   low — add a jumper or a per-variant resistor.
+3. **Header** grows to expose SDA/SCL if one board supports both modes.
+4. **SPI2 is on the Teensy 4.0 bottom pads (34–37)**, not the headers.
+5. **Wire1 alt pins 36/37 collide with SPI2** — use Wire1 on 16/17 only.
+6. **Pin 13 is the LED**; SCK on 13 makes it flicker (harmless).
+7. **SYNC (B1)** is still unrouted. Route it if hardware-aligned start-of-frame
+   is required; otherwise concurrency is software-only.
+8. **I2C pull-ups:** external, sensor side to 1.8 V and host side to 3.3 V; the
+   TCA9406 has 10 kΩ internal pull-ups on all four pins that cannot be disabled,
+   so fit 2.2 kΩ both rails (effective 1.8 kΩ) and drop to 1.5 kΩ above ~150 pF.
+9. **I2C_RST must be allowed low** for I2C — the library drives it low at
+   `begin()`. The current board pulls it high (SPI). Tie low or route to a GPIO.
+10. **SPI_I2C_N** low = I2C. A fixed pull-down removes the bus-reset capability
+    UM3109 describes; a GPIO is better.
+11. **Wire buffer:** Teensy `BUFFER_LENGTH` is 136 (tx 137), so the library's
+    default chunk (136, plus 2 address bytes) overflows. The cap
+    (`DEFAULT_I2C_BUFFER_LEN 128`) is set in
+    `vl53l8cx_platform_config_custom.h` under `#if defined(__IMXRT1062__)`, not
+    in the sketch, because `IO_Read`/`IO_Write` are inline members compiled in
+    every translation unit that includes `vl53l8cx.h`.
+12. **I2C translator: TCA9406.** Rated to Fm+ (1 MHz) and used here at 400 kHz, which is ample margin. A PCA9306 is not acceptable (400 kHz part). Use the **TCA9406** (TI: 2-bit bidirectional
+    1 MHz I2C/SMBus translator, VCCA 1.65-3.6 V, VCCB 2.3-5.5 V, VCCA <= VCCB,
+    internal 10 kOhm pull-ups, high-Z when OE low, VCC isolation). Still scope
+    the bus and size external pull-ups from the I2C formulas.
+13. **SYNC is a per-acquisition trigger** (UM3109 §4.15), not a start-of-frame
+    align. Do not tie all five together expecting simultaneity; use
+    separate/staggered lines for time-division.
+
+### 13.5 Firmware layout
+
+`code/teensy4/` holds `single_sensor_bringup`, `mode_a_single_bus` and
+`mode_b_multi_bus`; all three compile for `teensy:avr:teensy40` with the
+vendored patched library. The RP2350 sketches have been removed (host migrated
+to Teensy 4.0).
+
+### 13.6 Round-4 findings
+
+| # | Finding | Status |
+|---|---|---|
+| 20 | SPI1 26/27 are bottom pads, not headers | **Fixed** — Mode A/bring-up moved to `SPI` header pins |
+| 21 | Mode A/B lost retry/demotion/stale handling | **Fixed** — restored |
+| 22 | Mode A printed -1 every poll | **Fixed** — print only on update |
+| 23 | I2C_RST not handled for I2C | **Documented** — §13.4 item 9 |
+| 24 | Wire buffer overflow (2+136 > 137) | **Fixed** — `DEFAULT_I2C_BUFFER_LEN 128` |
+| 25 | PCA9306 at 1 MHz unproven | **Open** — scope |
+
+### 13.7 Round-5 findings
+
+| # | Finding | Status |
+|---|---|---|
+| 27 | I2C buffer define in the sketch cannot change the library's inline `IO_Read`/`IO_Write` | **Fixed** — moved to `vl53l8cx_platform_config_custom.h`, `#error` guard in `mode_b` |
+| 28 | PCA9306 is a 400 kHz part, Mode B needs 1 MHz | **Fixed (part change)** — TCA9406, TI lists 1 MHz Fm+ [V TI product page] |
+| 29 | I2C `IO_Read` loops forever on a NACK | **Fixed** — bounded to 5 attempts, returns 1 |
+| 30 | SPI sensors can never be demoted (reads always return OK) | **Fixed** — 2 s no-frame timeout demotes and schedules a retry |
+| 31 | Retry blocks healthy sensors | **Documented** — README cost table; 30 s period, one sensor per pass |
+| 32 | LED load on SCK pin 13 | **Accepted** — Teensy 4.0 core has `CNT_SCK_PINS = 1`; `setSCK()` cannot remap [V core 1.62.0] |
+| 33 | MISO bias must not use `pinMode(12, INPUT_PULLUP)` after `SPI.begin()` | **Documented** — external 10–47 kOhm only |
+| 34 | `I2C_RST` left at -1 keeps the SPI pull-up | **Documented** — I2C variant must tie it low or route a GPIO |
+| 4 | 1.8 V slew with EN=IN | **Open** — bench |
+| 5 | R7 back-feed | **Open** — bench |
+| 26 | MISO floats when all U3 Hi-Z | **Open** — 10–47 kΩ host-side pull |
+
+### 13.8 Round-6 findings and decisions
+
+| # | Finding | Status |
+|---|---|---|
+| 35 | Retry of a dead sensor blocks ~12 s: `started[]` not cleared on demotion, so `stop_ranging()` runs and polls MCU-stop for ~5 s, then 3 × ~2.1 s `init()` | **Fixed** — `demote()` clears `started[]`; `bring_up()` probes `is_alive()` first and returns in ms on a silent device |
+| 36 | I2C chunked read loop has no exit; a short `requestFrom` never advances `i` | **Fixed** — `IO_Read` returns 1 when a chunk is short (`got != current_read_size`); a partial chunk also corrupts the frame, so aborting is correct |
+| 37 | Frame is ~1444 B (not ~1.2 KB), but only three outputs are used | **Fixed** — `VL53L8CX_DISABLE_{AMBIENT_PER_SPAD,NB_SPADS_ENABLED,SIGNAL_PER_SPAD,RANGE_SIGMA_MM,REFLECTANCE_PERCENT,MOTION_INDICATOR}` in the custom config; frame → ~320 B. Consequence: at 400 kHz an I2C read is ~7 ms, so the 1 MHz requirement relaxes and the TCA9406 margin improves |
+| 38 | No-frame timeout was a fixed 2000 ms, independent of the frame period | **Fixed** — `max(2000 ms, 5 × frame period)` |
+| 39 | Round-5 claim "SPI sensors can never be demoted" was too strong | **Corrected** — `check_data_ready` does surface the sensor GO2 error byte; the no-frame timeout is still required for a silent sensor |
+| 25 | TCA9406 at 1 MHz on a 1.8 V bus | **Open (partly resolved)** — TI lists 1 MHz Fm+, VCCA 1.65–3.6 V, VCCB 2.3–5.5 V, internal 10 kΩ pull-ups, high-Z with OE low [V TI SCPS221G page]. Still bench: sink current vs bus capacitance, one-shot accelerators. With finding 37 the bus only needs ~7 ms/sensor, so 400 kHz would also fit |
+| 4 | 1.8 V slew with EN=IN | **Superseded — §13.9 / §13.10.** The EN RC is withdrawn (the system load switch does the sequencing) and the "per-carrier power cycle" bonus was refuted (AVDD stays up). Limit 58.3 µs |
+| 5 | R7 back-feed | **Superseded — §13.9.** Host-side pull-ups refuted; the 3V3_EXT load switch is adopted |
+| 26 | MISO bias | **Superseded — §13.9.** 71 kΩ typ internal pull-downs [V SCES898C §7.3.9]; likely no part, else 47 kΩ pull-**down** at the host |
+
+#### Mode C (five SPI masters via FlexIO) — refuted, not built
+
+The reviewer confirmed the analysis and rejected the performance argument:
+
+- Sampling is already concurrent in every mode; FlexIO only adds physical bus
+  isolation. The transfer is CPU-polled byte-by-byte on every bus, so the total
+  CPU time does not fall.
+- `FlexIOSPI` cannot do mode 3 without patching: `_dataMode` is stored and never
+  programmed, and `begin()` hard-codes SCK-idle-low / TX-on-falling /
+  RX-on-rising. An external inverter yields mode 2, not mode 3.
+- With the trimmed 320-byte frame, Mode A needs ~5 ms of a 66 ms period.
+
+Decision: **Mode A is the production topology; Mode B is the concurrent
+variant.** Mode C is dropped. If per-sensor bus isolation is ever required
+without I2C, use bit-banged SPI mode 3 on GPIO rather than `FlexIOSPI`.
+
+### 13.9 Round-7 findings and decisions (Rev 4)
+
+The reviewer obtained the primary documents this round: DS14161 **Rev 7**
+(Table 5 slews, Table 8 SPI timing, Table 12/14 currents, Table 15 I/O levels,
+Table 24 reflow), SCES898C **Rev C** (§5.11 enable/disable times, §7.3.9 static
+pull-downs), SCES882E **Rev E**, TCA9406 **Rev G**, MIC550x **Rev 2.3**, and the
+Teensyduino `Wire` sources. Round-6 fixes 35–39 were verified; no firmware
+blocker was found.
+
+| # | Finding | Status |
+|---|---|---|
+| 35–39 | Round-6 fixes | **Verified** against `vl53l8cx_api.c` and the datasheets |
+| 40 | **Host-side NCS pull-ups do not fix the R7 back-feed.** With the host off and 3V3_EXT on, the host-side pull-up ties NCS_H to the dead host rail → NCS_S low → U3 enabled and powered → five MISO push-pull drivers fight into the dead Teensy pad and into each other. The two options listed in §13.8 are **not** equivalent. | **Decided** — one **load switch on 3V3_EXT** (≥ 1.5 A) with host-driven enable and a **pull-down on the enable**; keep R7 board-side. Host off ⇒ rail dead ⇒ every carrier unpowered (Ioff on U3/U5). Adds a rail-level power cycle (see 44) and, as a bonus, replaces the per-board EN network (t_RAMP ≤ ~275 µs) |
+| 41 | **No-frame timeout cascade.** A wedged-but-ACKing sensor costs ≥ 2.1 s per `init()`; three attempts ≈ 6.4 s. That exceeds the 2000 ms window, so on the following pass every healthy sensor trips `now − last_update > 2000` and is demoted too — one fault blanks the array for tens of seconds | **Fixed** — the retry runs before the no-frame check, a pass that retried re-baselines `last_update_ms[]` for all healthy sensors, and `bring_up()` makes a **single** `configure()`+`start()` attempt (the 30 s loop is the retry) |
+| 42 | §13.8's "10–47 kΩ host-side pull" was direction-ambiguous and the pull-**up** reading is wrong | **Fixed** — SCES898C §7.3.9 [V]: 71 kΩ typ internal pull-downs on every data I/O, ≈14.2 kΩ across five boards → MISO_H is biased, **probably no part needed**. If the scope shows float/mid-rail, fit 47 kΩ **pull-down** at the host. Never a pull-up, and never > 7 kΩ per TI |
+| 43 | R6 = 10 kΩ leaves SCLK_S idle at 1.58 V against a 1.26 V V_IH — above spec but thin | **Fixed** — R6 → **6.8 kΩ** (idle 1.64 V), also within TI's ≤ 7 kΩ pull-up rule. §2.3 and the BOM updated |
+| 44 | A stuck I2C slave (SDA held low) cannot be recovered by the controller | **Covered** — the 3V3_EXT load switch is the recovery path; one-sensor-per-bus keeps the blast radius to one bus |
+| 45 | `static_assert` message said ~272 B; the trimmed struct is **258 B** (frame 320 B, `MAX_RESULTS_SIZE` 328 B) | **Fixed** — message updated in all three sketches |
+| 46 | After round 6, the `if (started[i]) stop_ranging()` branches were dead code | **Fixed** — `started[]` and every `stop_ranging()` call removed; a comment in `demote()` records why. Verified: `init()` starts with a software reboot |
+| 25 | TCA9406 at 1 MHz | **Closed** — I2C moves to **400 kHz**. A trimmed frame read is (2 + 320) × 9 bits ≈ 7.3 ms, so two I2C sensors use ~22 % of a 66.7 ms frame; 1 kHz-era 62 ms figure applied to the untrimmed frame. Fm+ rise-time budget (t_r ≤ 120 ns) is no longer needed. Pull-ups: 2.2 kΩ both rails (effective 1.8 kΩ with the internal 10 kΩ; t_r ≈ 153 ns at 100 pF), 1.5 kΩ if the harness exceeds ~150 pF. R_p(min) from DS14161 Table 15: (1.8 − 0.36)/4 mA = 360 Ω |
+| 4 | 1.8 V slew with EN = IN | **Closed by the load switch (§13.9).** Table 5 slews are **minimums**: CORE_1V8/IOVDD 0.9→1.6 V in ≤ **58.3 µs**; AVDD to full level in ≤ 3.3 ms. A TPS22918-class switch with CT open gives t_R ≈ **95 µs** at 3.3 V, so CORE_1V8 tracks the rail through the MIC5504's dropout and EN = IN is fine. The per-board EN RC + 2N7002 network is **withdrawn** (see the round-8 correction below) |
+| 26 | MISO bias | **Likely no part** (see 42); scope Stage 1.2 |
+| — | Address-phase NACK vs short chunk | **Fixed** — `IO_Read` retries a **zero-length** `requestFrom` (address NACK ⇒ the sensor's pointer did not advance, so the chunk is replayable) and still aborts on a **short** chunk (the pointer did advance ⇒ no safe in-driver resync) |
+| — | U3/U5 enable times | **Resolved** — SCES898C §5.11 at VCCA 1.8 / VCCB 3.3: t_EN ≤ 24–26 ns, t_DIS ≤ 17–20 ns, t_pd ≤ 7 ns. The 1 µs CS-settle delay has ~38× margin |
+| — | R7 must be kept | **Kept**, 4.7 kΩ board-side. With the switch **off and the host on**, a driven CS does push ~0.7 mA/board into the dead 3V3 node — so the firmware must raise the rail **before** driving any CS/NCS (`RAIL_EN_PIN`, Teensy pin 2). With the host off or resetting, the GPIOs are Hi-Z and no back-feed path is active |
+
+#### Mode B verdict (round 7)
+
+A trimmed frame read is 0.97 ms on SPI at 3 MHz, so a worst-case Mode A pass with
+all five ready is **4.35 ms = 6.5 %** of a 66.7 ms frame; 8×8 tops out at 15 Hz.
+Mode A's sequential polling was never the bottleneck, and the trim removed Mode
+B's only real advantage. **Do not fabricate the I2C carrier variant.** Mode B's
+costs: TCA9406 + pull-up engineering per I2C carrier, two strap changes, bottom-pad
+soldering for SPI1/SPI2 regardless, plus an extra failure class (stuck SDA). The
+`mode_b` sketch and §13.4 deltas stay as documented options. If isolation is ever
+needed, the next step is **`SPI` + `SPI1`** (3+2, identical carriers), not I2C.
+
+#### Also settled this round
+
+- `is_alive()` on a streaming sensor is **harmless**: it only switches the host-interface
+  page (0x7FFF) and reads ID registers; the ranging MCU, frame buffers and the
+  driver's `streamcount`/`data_read_size` are untouched.
+- `init()`'s block configuration cannot go stale: it reboots and re-downloads,
+  `start_ranging()` rewrites the output list/enables, and it **verifies** the
+  resulting `data_read_size` against the host value (api.c 612–617).
+- `MAX_RESULTS_SIZE` 328 < `TEMPORARY_BUFFER_SIZE` 1024, so the trim does not
+  under-size `temp_buffer`; every `temp_buffer` consumer is bounded independently.
+- Teensy `requestFrom` returns `uint8_t` in all five overloads, so the existing
+  cast is a no-op; `BUFFER_LENGTH` 136 / tx 137, and 2 + 128 = 130 fits.
+
+### 13.10 Round-8 findings and decisions (Rev 5)
+
+| # | Finding | Status |
+|---|---|---|
+| r8-1 | **The per-board EN pull-down is not a sensor reset.** Pulling EN low disables the MIC5504, which auto-discharges only the **1.8 V** output (25 Ω). AVDD stays at 3.3 V, so the sensor sees CORE_1V8/IOVDD collapse while AVDD is held — DS14161 requires the three supplies to be removed **together**. §13.9's "per-carrier power cycle" bonus was wrong. | **Fixed** — the sensor reset / stuck-I2C recovery is assigned to the 3V3_EXT load switch only (it kills AVDD and 1.8 V together). The EN path, if ever fitted, is a power-**up** sequencer and is documented as such |
+| r8-2 | **The two power mechanisms are redundant.** A TPS22918-class switch with CT open gives t_R ≈ 95 µs at 3.3 V — inside the 275 µs CORE_1V8-tracking budget — so the switch alone satisfies the slew rule *and* is the only valid reset. Keeping five EN RCs, five 2N7002s and a 1×7 header buys nothing. | **Fixed** — **load switch only.** Per-board EN RC + 2N7002 + J1 1×7 **withdrawn**; J1 stays 1×6; EN = IN per board |
+| r8-3 | **TPS22918 sizing.** t_R(10–90 %) = 95 µs with CT open; downstream capacitance 5 × (4.7 + 2.2 + 0.1 + 0.1) + 1 µF at VOUT = **36.5 µF** ⇒ inrush ≈ 36.5 µF × 3.3 V / 95 µs ≈ **1.27 A** (2 A switch: OK). Bulk added **downstream** pushes the peak to ≈ 2.87 A, so keep the ≥ 47 µF bulk upstream; otherwise CT = 220 pF ⇒ t_R ≈ 455 µs, inrush 0.60 A. Drop at 750 mA peak: ≤ 78 mΩ × 0.75 A ≈ **59 mV**. | **Adopted** — one switch, ≥ 1.5 A, CT open, bulk upstream, **100 kΩ pull-down on ON** (the datasheet does not state an internal one) |
+| r8-4 | **`bring_up_all()` had no `is_alive()` gate.** A dead SPI sensor never errors, so `init()` burns its full poll chain (~2 s boot poll + 0.5 s mcu_boot + download + ~2 s verify ≈ 4.8 s) × 3 attempts ≈ **15 s per dead board**, i.e. ~75 s to first CSV line with five missing boards. | **Fixed** — a shared `probe()` (is_alive, 3 tries, 50 ms apart) now gates both `bring_up()` and `bring_up_all()`; a silent board is reported once and skipped |
+| r8-5 | **~108 KB of static RAM.** The reviewer inferred the firmware/config arrays were non-const. They are already `const`; the cause is the Teensy linker script, which places `.rodata` in `.data` and copies it to DTCM. | **Measured, accepted** — `VL53L8CX_FIRMWARE` resolves to `0x20000aa8`, size `0x15000` (86 KB) in `.data`. RAM1 variables 108 544 B of 512 KB, **350 KB free**. No code change; not worth a linker-script hack |
+| r8-6 | **Stale `1 MHz is required` text** and RP2350 remnants in §8/§10/§13.4. | **Fixed** — §13.3 rewritten to 400 kHz with the 7.3–7.4 ms derivation and the history (65.2 ms of 66.7 ms was the *untrimmed* number); §8 harness now Teensy 13/11/12 + CS 10…6; §10 checklist rows migrated off GP2–GP6/GP10–GP12/Arduino-Pico and now include the load-switch and bottom-pad rows; §13.4 items 1 and 8 name the TCA9406 only |
+| r8-7 | I²C retry cost was understated in the README (~1 s per attempt) | **Fixed** — a healthy I²C re-init is ~2.2 s at 400 kHz; a wedged-firmware one is ~4.6 s |
+
+Worst-case array dark time after r8-4 plus the single-attempt retry: **≈ 2.9 s** (wedged SPI sensor) or **≈ 4.6 s** (wedged I²C sensor at 400 kHz) per 30 s, with no demotion cascade.
+
+Still bench-only: CORE_1V8 0.9→1.6 V ≤ 58.3 µs per board, the switch's t_R under the real 36.5 µF load, MISO_H idle with five Hi-Z boards, I²C rise times, re-init of a *streaming* sensor, and whether ST's firmware emits exactly the 320 B block set.
+
+### 13.11 Round-9 findings and decisions (Rev 6)
+
+Round 9 confirmed §13.9/§13.10 except one uploaded file, and caught a real gap: the
+adopted load switch had **no firmware** and **no BOM entry**. It also settled the
+slew question with numbers.
+
+| # | Finding | Status |
+|---|---|---|
+| r9-1 | **The load switch was never enabled by firmware.** Its ON pin has a 100 kΩ pull-down, so the rail is off at every reset; with no sketch driving it, all five probes fail and the array never starts | **Fixed** — `RAIL_EN_PIN = 2` in all three sketches, asserted **before** `park_all_ncs_high()` (driving a CS while the rail is off feeds ~0.7 mA/board through R7 into the dead node) |
+| r9-2 | **The switch had no system BOM.** §7 listed carriers only | **Fixed** — §7 system BOM: switch (TPS22918-class, ≥ 1.5 A), 100 kΩ ON→GND, 22 µF at VIN, 1 µF at VOUT, ≥ 47 µF bulk **upstream** |
+| r9-3 | **§13.9's "no current flows" was wrong for host-on/switch-off** | **Fixed** — the row now states the >0.7 mA/board path and the firmware ordering rule that prevents it |
+| r9-4 | **Silent-but-healthy sensors cost array duty forever** (1.3 % SPI, 7.2 % I²C@400 kHz per 30 s stall) | **Fixed** — ×10 back-off after 3 consecutive silent demotions (30 s → 300 s cap), reset by the first real frame, one log line when it engages |
+| r9-5 | **Slew: is CT needed?** | **Closed — CT open.** Rail t_R 95 µs ⇒ 0→3.3 V ≈ 119 µs ⇒ 0.0278 V/µs, **2.3×** the 0.012 V/µs minimum. CORE_1V8 window: ≈ **25 µs** if the LDO input-tracks, ≈ **48.6 µs** worst case if its own 125 µs turn-on governs — both inside 58.3 µs. A CT only slows the rail toward the tracking ceiling (CT ≲ 100–150 pF would still fit); it cannot fix the soft-start-limited case, so the bench scope decides which case was built |
+| r9-6 | **`probe()` timing** | **Confirmed adequate.** Rails valid ≈ 0.3–0.5 ms after ON-high (switch t_D ≈ 0.1 ms + t_R 95 µs + MIC5504 t_EN ≤ 125 µs); the first probe runs ≥ 50 ms in, and ≥ 3 s when USB is attached. The 100 ms at the top of `init()` is a post-reboot settle, not a power-on requirement |
+| r9-7 | **Doc residuals** — dangling EN-RC fallback in §8, RP2350 remnants in §7/§9.3, resolved `[U]` items in §9.5 and the risk list, §13.8 rows 4/5/26 reading as current, §13.4 item 12's "1 MHz-capable" | **Fixed** — §8 now names `RAIL_EN_PIN`; §7 and §9.3 name the Teensy; §9.5 and the risk list record the software-reboot and SCES898C enable-time results; §13.7/§13.8 rows 4/5/26 are marked superseded; §13.4 item 12 rewritten |
+| r9-8 | `vl53l8cx.h` arrived at 14 291 B (round-7 content) while the other nine files matched | **Upload-only issue** — the workspace copy is 14 791 B with the zero-length retry. Round 10 embeds the patched source inline so it cannot happen again |
+
+**Firmware after r9-1/r9-4:** Mode A 46 672 flash / 108 544 RAM1, Mode B 47 776 /
+110 624, bring-up 45 840 / 99 040. All three compile with arduino-cli 1.5.1 /
+teensy:avr 1.62.0.
+
+### 13.12 Round-10 findings (Rev 7) — review converged
+
+Round 10 returned **no BLOCKER, MAJOR or MINOR**. The two round-9 MAJORs were
+verified closed from source, and the reviewer confirmed independently that
+DIR = LOW selects the B port as driver (B→A) — closing round 8's direction
+question. Three NITs remained.
+
+| # | Finding | Status |
+|---|---|---|
+| r10-1 | The small (single-chunk) I²C read lacked the zero-length retry that the chunked path has | **Fixed** — same bounded loop in both branches; a short read is still caught by `return i != size` |
+| r10-2 | `IO_Write` ignored intermediate `endTransmission` results, so a mid-download NACK was invisible (the sensor's firmware CRC was the only backstop) | **Fixed** — the first failed chunk is recorded and returned; every caller already checks the status |
+| r10-3 | §8's U5 line wrote "A→B", contradicting the datasheet function table (DIR = GND ⇒ B port output) | **Fixed** — now reads "DIR = GND ⇒ B→A (host drives sensor)", with the direction marked [V] and only the SCES882E pin numbers left [U] |
+| r10-4 | Downstream capacitance missed the 1 µF at VOUT: 36.5 µF, inrush 1.27 A (not 35.5 µF / 1.23 A) | **Fixed** — §13.10 r8-3, the §10 checklist and the README |
+
+Bench items unchanged: switch t_R under the real 36.5 µF, CORE_1V8 window per
+board, MISO_H idle level, I²C rise times, re-init of a streaming sensor, and the
+sensor's actual 320 B block set.
+
+### 13.13 Round 11 — verification phase (Rev 7 frozen)
+
+Round 11 was a verification pass, not a review: the full frozen source was
+embedded inline and the reviewer was asked for a binary verdict per row across
+four matrices — carrier electrical **E1–E19**, firmware **F1–F20**, library
+patches **L1–L9**, system/assembly **S1–S9** (57 rows).
+
+**Result: 47 PASS / 10 NV / 0 FAIL. No code or documentation change was made.**
+
+| Matrix | Rows | PASS | NV |
+|---|---|---|---|
+| E — carrier electrical | 19 | 15 | E3, E4, E10, E14 |
+| F — firmware | 20 | 18 | F1, F18 |
+| L — library patches | 9 | 9 | — |
+| S — system / assembly | 9 | 5 | S3, S4, S6, S9 |
+| **Total** | **57** | **47** | **10** |
+
+The NV rows are the same bench/document closures already tracked as R1–R10 in
+the README, now with a named measurement each (B0 harness, B1 rail statics,
+B2 power edges, B3 MISO idle, B4 first frames, B5 SPI signals, B6 remove/restore,
+B7 forced demote, B8 soak, B9 I²C edges), plus S4 (copy the AN5897 Fig. 3 paste
+pattern onto the stencil) and S6 (copy the cleaning/coating clause onto the
+assembly drawing).
+
+Verification checked the round-10 NITs as source (L2 zero-length retry in both
+I²C read paths, L4 first-failed-chunk status propagation), confirmed
+DIR = GND ⇒ B→A for U5 from SCES882E's function table, and reproduced the
+numbers: 320 B frame, 258 B struct, 328 B `MAX_RESULTS_SIZE` < 1024 B
+`TEMPORARY_BUFFER_SIZE`; 36.5 µF ⇒ 1.27 A inrush; 78 mΩ × 750 mA = 59 mV;
+1.8 × 71/77.8 = 1.64 V SCLK_S idle; 2 + 128 = 130 ≤ 137 B Wire TX buffer;
+`max(2000, 5 × 66) = 2000 ms` no-frame timeout.
+
+One cosmetic evidence typo was noted: E8's 1.51 V idle figure is the 35.5 kΩ
+(half-value) internal pull-down case, not "2× typical" (142 kΩ would give
+1.72 V). The PASS verdict is unaffected — both clear V_IH = 1.26 V.
+
+**Consequence: no action. Design frozen at Rev 7; proceed to Stage 1 bring-up.**
+The only residual that can force a design change is **R4** (re-init of a
+streaming sensor); the load switch already provides the fallback (rail cycle in
+the retry path).
