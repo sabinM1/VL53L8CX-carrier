@@ -37,17 +37,25 @@ demoted sensor). Everything else is millimetres.
 ## 1. System overview
 
 ```mermaid
-flowchart LR
+flowchart TB
     USB["USB 5 V"] --> T["Teensy 4.0"]
-    PSU["3.3 V supply<br/>>= 1.5 A"] --> LS["Load switch<br/>TPS22918 class"]
+    PSU["3.3 V supply, at least 1.5 A"] --> LS["Load switch, TPS22918 class"]
     T -->|"GPIO 2 = RAIL_EN"| LS
     LS -->|"3V3_EXT"| C1["Carrier 0"]
     LS -->|"3V3_EXT"| C2["Carrier 1"]
     LS -->|"3V3_EXT"| C3["Carrier 2"]
     LS -->|"3V3_EXT"| C4["Carrier 3"]
     LS -->|"3V3_EXT"| C5["Carrier 4"]
-    T -->|"SCLK / MOSI / MISO"| C1 & C2 & C3 & C4 & C5
-    T -->|"CS 10,9,8,7,6"| C1 & C2 & C3 & C4 & C5
+    T -->|"SCLK, MOSI, MISO"| C1
+    T -->|"SCLK, MOSI, MISO"| C2
+    T -->|"SCLK, MOSI, MISO"| C3
+    T -->|"SCLK, MOSI, MISO"| C4
+    T -->|"SCLK, MOSI, MISO"| C5
+    T -->|"CS 10, 9, 8, 7, 6"| C1
+    T -->|"CS 10, 9, 8, 7, 6"| C2
+    T -->|"CS 10, 9, 8, 7, 6"| C3
+    T -->|"CS 10, 9, 8, 7, 6"| C4
+    T -->|"CS 10, 9, 8, 7, 6"| C5
 ```
 
 The load switch is the **only** way the sensors are powered down. It is also the
