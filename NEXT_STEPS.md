@@ -12,6 +12,41 @@ CS lines). Do not build the I²C carrier variant.
 
 ## 0. Tooling
 
+### 0.0 Measurement matrix (read this first)
+
+Your kit: **portable DSO 200 kHz / 2.5 MS/s**, **LogicAnalyzer V6.0**,
+**DMM**, bench supply, USB serial. Every measurement in the build is listed
+here with the instrument that closes it and whether your kit is sufficient.
+
+| # | Measurement | Target | Instrument | Sufficient? |
+|---|---|---|---|---|
+| 1 | J1 continuity, no 3V3–GND short | — | DMM | **Yes** |
+| 2 | Harness round-trip resistance | < 0.15 Ω | DMM | **Yes** |
+| 3 | Per-board 1V8 | 1.755–1.845 V | DMM | **Yes** |
+| 4 | Far-board AVDD under load (R9) | ≥ 3.13 V | DMM | **Yes** |
+| 5 | Supply current, all ranging | 400–550 mA | Bench PSU display (or USB meter) | **Yes** |
+| 6 | AVDD 0→3.13 V edge | ≤ 3.3 ms | Portable DSO | **Yes** |
+| 7 | CORE_1V8 0.9→1.6 V window (R2) | ≤ 58.3 µs | Portable DSO | **Yes** |
+| 8 | Load-switch t_R, CT open | ≤ 275 µs (expect ~95 µs) | Portable DSO | **Yes** |
+| 9 | QOD discharge after ON low | < 0.33 V in 10 ms | Portable DSO | **Yes** |
+| 10 | MISO_H idle, five CS high (R6) | ≈ 0 V | Portable DSO or DMM | **Yes, with caveat** (10 MΩ probe can mask a true float; confirm with the 1 MΩ pull-up test if in doubt) |
+| 11 | SPI SCK frequency and duty (R8) | 2.85–3.15 MHz, 40–60 % | LogicAnalyzer V6.0, 8 ch @ 100 Msps | **Yes** |
+| 12 | NCS fall → first SCK edge | ≥ 0.9 µs | LogicAnalyzer V6.0 | **Yes** |
+| 13 | SPI mode-3 idle levels, CS frames, 320 B decode | clean | LogicAnalyzer V6.0, 24 ch @ ≥ 20 Msps | **Yes** |
+| 14 | One MISO driver / OE timing | only selected board drives | LogicAnalyzer V6.0 | **Yes** |
+| 15 | Frame rate / CSV cadence | ≈ 15 lines/s | Serial terminal + host timer | **Yes** |
+| 16 | `start_ranging` OK (R3) | status 0 | Serial terminal | **Yes** |
+| 17 | Re-init while streaming (R4) | frames resume | Serial terminal, send `r` | **Yes** |
+| 18 | Remove/restore a sensor | −1, then recovery | Serial terminal | **Yes** |
+| 19 | I²C clock 400 kHz (Mode B) | ±5 % | LogicAnalyzer V6.0 | **Yes** |
+| 20 | I²C rise time (R7, Mode B) | ≤ 300 ns | **Scope ≥ 20 MHz** | **No** — borrow one; only if Mode B is built |
+| 21 | I²C NACK drill (Mode B) | demotion, no hang | Serial terminal | **Yes** |
+| 22 | 1 h soak, current drift | < 10 % | Bench PSU / DMM | **Yes** |
+| 23 | LDO temperature (optional) | no hotspot | Touch or thermal camera | Optional |
+
+The only gap in your kit is **row 20**, and it only exists if you deliberately
+build Mode B. Rows 1–9, 10, 11–19 and 21–22 are fully covered.
+
 ### 0.1 LogicAnalyzer V6.0 — what it can and cannot do
 
 The gusmanb **LogicAnalyzer V6.0** (RP2040/RP2350) is a **digital** instrument:
