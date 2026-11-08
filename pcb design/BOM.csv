@@ -1,5 +1,5 @@
 Reference,Assembly,Qty,Value,MPN,Package,Purpose,Notes
-U1,Carrier,5,VL53L8CX,VL53L8CXV0GC/1,LGA-16 6.4x3.0x1.75 mm,8x8 multizone ToF sensor,SOURCED (liner version); SPI mode; MSL 3; no wet cleaning or coating; max 3 reflows
+U1,Carrier,5,VL53L8CX,VL53L8CXV0GC/1,LGA-16 6.4x3.0x1.75 mm,8x8 multizone ToF sensor,SOURCED (liner version); SPI mode; MSL 3; no wet cleaning or coating; max 3 reflows; REMOVE THE LINER after reflow and before the cover glass
 U2,Carrier,5,MIC5504-1.8,MIC5504-1.8YMT-TR,UDFN-4 1.0x1.0 mm (MT),1.8 V LDO for CORE_1V8 + IOVDD + VCCA,CONFIRMED datasheet; UDFN pinout 1=VOUT 2=GND 3=EN 4=VIN + EP to GND; EN high >= 1.2 V; 4 Mohm EN pull-down; 25 ohm auto-discharge; +/-3 % over temperature
 U3,Carrier,5,SN74AXC4T774,SN74AXC4T774RSVR,UQFN-16 2.6x1.8 mm (RSV),SCLK/MOSI/MISO 3.3 V <-> 1.8 V translator,OE = NCS_S; DIR1/2/3 = GND; DIR4 = 1V8; DIR and OE are VCCA-referenced; RSV PIN NUMBERS STILL TO CONFIRM
 U5,Carrier,5,SN74AXC1T45,SN74AXC1T45DTQR (X2SON-6) or DCKR (SC70-6) or DBVR (SOT-23-6),X2SON-6 1.0x0.8 mm / SC70-6 / SOT-23-6,NCS translator 3.3 V -> 1.8 V,CONFIRMED datasheet; pins 1=VCCA 2=GND 3=A 4=B 5=DIR 6=VCCB; DIR = GND => B->A; DTQ is the smallest package - hard to hand-solder
@@ -19,7 +19,7 @@ R4,Carrier,5,47 kohm,RC0402DR-0747KL,0402,LPn pull-up to 1V8,Device always enabl
 R5,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SPI_I2C_N pull-up to 1V8,Selects SPI; Mode B variant pulls this low
 R6,Carrier,5,6.8 kohm,AC0402FR-076K8L,0402,SCLK_S pull-up to 1V8,SOURCED Yageo AC 6.8 kohm +/-1 % (F); replaces the 10 kohm part AC0402DR-0710KL; 1.64 V idle vs V_IH 1.26 V; within TI's <= 7 kohm limit
 R7,Carrier,5,4.7 kohm,RE0402DRE074K7L,0402,NCS_H pull-up to 3V3,CONFIRMED Yageo RE 4.7 kohm +/-0.5 % 50 ppm; keep board-side
-J1,Carrier,5,1x6 header 2.54 mm,PH1-06-UA (Adam Tech),THT 1x6 2.54 mm,Carrier interface,SOURCED; 3V3_EXT / GND / SCLK / MOSI / MISO / NCS; add silk labels; confirm straight vs right-angle and plating for the UA suffix on the Adam Tech drawing
+J1,Carrier,5,1x6 header 2.54 mm,PH1-06-UA (Adam Tech),THT 1x6 2.54 mm,Carrier interface,SOURCED; STRAIGHT/vertical; 1.02 mm holes on 2.54 mm pitch; 3 A per contact; gold flash; no moulded pin-1 mark so silkscreen it; 3V3_EXT / GND / SCLK / MOSI / MISO / NCS
 PCB,Carrier,5,VL53L8CX carrier PCB,-,2-layer FR4 1.6 mm 1 oz,Sensor carrier,ENIG preferred; copy DS14161 land pattern and AN5897 thermal pad
 U10,System,1,Load switch,TPS22918TDBVRQ1,SOT-23-6 (DBV),Switched 3V3_EXT rail for all five carriers,SOURCED (AEC-Q100); pins 1 VIN 2 GND 3 ON 4 CT 5 QOD 6 VOUT; ON V_IH >= 1 V; R_ON 53 mohm typ / 59 max at 25 C / 107 max over -40..105 C; CT OPEN with no footprint => t_R 95 us at 3.3 V; STRAP QOD (5) TO VOUT (6) for the internal 25 ohm discharge
 R10,System,1,100 kohm,RC0402DR-07100KL (suggested),0402,Load switch ON pull-down to GND,Rail must default off; datasheet states no internal pull-down; TO CONFIRM MPN

@@ -454,7 +454,7 @@ Optional, not counted: R8 47 kΩ MOSI_S → 1V8 (if the sensor's MOSI input is s
 
 **U3 SN74AXC4T774 (RSV; pin numbers [V Rev 1, SCES898C Table 4-1])**
 
-> **Rev 3 (round-3 review): resolved as consistent.** A second SCES898C mirror (pdf.elecfans.com) gives RSV as VCCA=14, VCCB=13, GND=8, OE=7, A1–A4=1–4, B1=12, B2=11, B3=10, B4=9, DIR1/2=15/16, DIR3/4=5/6 — this matches the netlist below. The earlier conflict came from a mis-fetched table. **Still confirm on TI's own pinout figure before layout** (the mirror is secondary).
+> **Resolved.** A second SCES898C mirror (pdf.elecfans.com) gives RSV as VCCA=14, VCCB=13, GND=8, OE=7, A1–A4=1–4, B1=12, B2=11, B3=10, B4=9, DIR1/2=15/16, DIR3/4=5/6 — this matches the netlist below. **Checked against TI's own figures (Figure 4-3 and Table 4-1) and confirmed identical.** The earlier conflict came from a mis-fetched table.
 
 | Pin | Function | Connection |
 |---|---|---|
@@ -547,7 +547,7 @@ AN5939 Rev 3 Table 5 [V]: air gap + glass < 1.5 mm; air gap < 0.5 mm without a g
 2. **Library and SPI were unproven on the RP2350.** Moot: the host is a Teensy 4.0 (core 1.62.0) and all three sketches compile.
 3. **1.8 V rail slew** per board (Rev 1 main risk, unchanged; limit is 58.3 µs, not 63 µs). Superseded by the load-switch decision (§13.9).
 4. **Edge-pin assignment** of the GPIOs is moot (Teensy header map, §13.3).
-5. **U3/U5 pin numbers** — **U5 is confirmed** (VCCA 1, GND 2, A 3, B 4, DIR 5, VCCB 6; DIR = GND ⇒ B→A) and **MIC5504 is confirmed** (VOUT 1, GND 2, EN 3, VIN 4, EP) from the datasheet conversions in `reference docs/components/`. **U3 (RSV) pin numbers remain [U]** — the conversion has a pin-function table but no numbered pinout; confirm VCCA 14 / VCCB 13 / GND 8 / OE 7 / A1–A4 1–4 / B1–B4 12–9 / DIR1/2 15/16 / DIR3/4 5/6 on TI's drawing before layout (§8).
+5. **U3/U5 pin numbers** — **both confirmed.** U5: VCCA 1, GND 2, A 3, B 4, DIR 5, VCCB 6 (DIR = GND ⇒ B→A). U3: VCCA 14, VCCB 13, GND 8, OE 7, A1–A4 1–4, B1–B4 12–11–10–9, DIR1/2 15/16, DIR3/4 5/6, checked against TI's Figure 4-3 / Table 4-1. MIC5504 also confirmed (VOUT 1, GND 2, EN 3, VIN 4, EP). **Closed.**
 6. **R7 back-feed** makes "any power-up order" false; the 3V3_EXT load switch is the fix (§13.9).
 5. **Worst-case current** assumes simultaneous 150 mA peaks; a real array may stay lower, but the supply should be sized for 750 mA.
 6. **Items I could not retrieve (Rev 7 status):** *resolved* — AXC4T774 tEN/tDIS (SCES898C §5.11: t_EN ≤ 26 ns, t_DIS ≤ 20 ns) and pull-down behaviour with OE high (71 kΩ static, §7.3.9); AXC1T45 DIR reference rail (VCCA) and pin numbers; MIC5504 pin numbers; `vl53l8cx.h` constructor and API (all verified against the vendored source); TPS22918-Q1 R_ON, ON V_IH, QOD and t_R(CT open) (§13.15). *Still open, bench-only* — the load switch's t_D at CT = 0, its reverse-current behaviour, and t_R under the real 36.5 µF load.
@@ -994,3 +994,22 @@ Reasoning, so it is not reopened later:
 - **100 kΩ on ON is mandatory.** ON has no internal pull-down and the datasheet
   says it must not float; 0.1 µA leakage × 100 kΩ = 10 mV, far below V_IL 0.5 V.
   Place R10 at the switch, not at the Teensy.
+
+### 13.16 Pre-layout document check — closed (Rev 7)
+
+A fresh reader checked three documents against the netlist and returned **PASS on
+all three**. No netlist or BOM change required.
+
+| Item | Result |
+|---|---|
+| U3 SN74AXC4T774, RSV/UQFN-16 | **Confirmed** against TI Figure 4-3 and Table 4-1 (p. 3): VCCA 14, VCCB 13, GND 8, OE 7, A1–A4 1–4, B1–B4 12/11/10/9, DIR1/2 15/16, DIR3/4 5/6. The netlist is unchanged |
+| J1 Adam Tech PH1-06-UA | **Straight/vertical** THT, gold flash over nickel, **3 A per contact**, 0.600 in (15.24 mm) overall, 0.500 in (12.70 mm) pin span, 0.098 in (2.50 mm) body width, **1.02 mm holes on 2.54 mm pitch**. Pin 1 is designated on the drawing but **not moulded into the housing** — the silkscreen mark is the only assembly aid, so it is mandatory |
+| U1 VL53L8CXV0GC/1 | **Liner version.** The liner is reflow-compatible to 260 °C and is **removed after reflow, before the cover glass goes on**. Leaving it in place means the sensor sees nothing |
+
+Consequences for the layout: J1's footprint is the straight 1.02 mm-hole pattern
+(not right-angle), pin 1 needs a silk marker and a copper keep-out note, and the
+assembly drawing must carry the liner-removal step.
+
+**Remaining open items are bench-only:** R2 (CORE_1V8 window), R3 (sensor's real
+320 B block set), R4 (re-init of a streaming sensor), R6 (MISO_H idle), R7 (I²C
+rise time), R8 (LPSPI duty), R9 (far-end AVDD), R10 (Rev-7 compile record).

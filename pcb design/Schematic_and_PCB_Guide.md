@@ -144,9 +144,9 @@ whole scheme; keep it.
    - A3/B3 = unused; B3 to GND, A3 no connect, DIR3 = GND
    - A4/B4 = MISO, DIR4 = `1V8` (A→B)
 4. C4 (100 nF) at VCCA, C5 (100 nF) at VCCB.
-5. **Confirm the RSV (UQFN-16) pin numbers on TI's own pinout figure.** The
-   current assignment comes from a secondary mirror and matches the netlist, but
-   it has not been checked against TI's drawing.
+5. **Pin numbers are confirmed** against TI's Figure 4-3 / Table 4-1:
+   VCCA 14, VCCB 13, GND 8, OE 7, A1–A4 1–4, B1–B4 12/11/10/9, DIR1/2 15/16,
+   DIR3/4 5/6.
 
 > **Do not** route NCS through U3. If NCS is on the A/B pair that U3 gates, the
 > board can never be selected because OE is derived from that same NCS.
@@ -181,11 +181,14 @@ pull-down) and do not move R7 to the host.
 
 ### 3.6 Header (J1)
 
-1. 1×6, 2.54 mm, THT, pin 1 = `3V3_EXT`.
-2. Pin order must be **3V3_EXT, GND, SCLK, MOSI, MISO, NCS**. A keyed or
+1. 1×6, 2.54 mm, THT, **straight/vertical** (Adam Tech PH1-06-UA), pin 1 = `3V3_EXT`.
+2. Footprint: 1.02 mm holes on 2.54 mm pitch, 12.70 mm pin span, 15.24 mm overall,
+   2.50 mm body width, 3 A per contact, gold flash. **Straight, not right-angle**
+   — a right-angle part will not fit this pattern or the board outline.
+3. Pin order must be **3V3_EXT, GND, SCLK, MOSI, MISO, NCS**. A keyed or
    shrouded header is fine if the harness matches.
-3. Add a silk label for pin 1 and for the signal names. Five identical boards
-   will be plugged in blind.
+4. **Silkscreen pin 1 and the signal names.** The connector has no moulded pin-1
+   mark, and five identical boards will be plugged in blind.
 
 ### 3.7 System power sheet (one per system)
 
@@ -242,7 +245,7 @@ Run ERC, then check each row by hand. Every row must pass before layout.
 | S9 | Every IC has a 100 nF within a few mm in the placement plan | C1–C9 all used, none orphaned |
 | S10 | No net named `3V3` is connected to J1 pin 1 | J1 carries `3V3_EXT` |
 | S11 | DNC/RSVD pins match DS14161 Table 3 | Documented decision, not a guess |
-| S12 | Pin numbers match TI's pinout figures | U5 confirmed (1/2/3/4/5/6); U3 RSV still to check |
+| S12 | Pin numbers match TI's pinout figures | **Pass** — U3 and U5 both confirmed |
 | S13 | LDO EN = IN, no per-board enable network | No 2N7002, no RC |
 | S14 | No reset line to the sensor | Only the rail switch |
 | S15 | No part added or removed vs the 20-part BOM | Count = 20 |
@@ -350,8 +353,10 @@ only, if scoping shows ringing. Do not fit them pre-emptively.
 - Drill file with the 0.3 mm thermal vias called out (plugged or tented).
 - **Stencil**: 90–150 µm, with the thermal-pad apertures split into the eight
   rectangles; do not let the stencil house merge them into one opening.
-- Assembly drawing: mark U1 pin 1 and the B4 thermal pad, and print the cleaning
-  and coating prohibition on it (see §10).
+- Assembly drawing: mark U1 pin 1 and the B4 thermal pad, mark **J1 pin 1**
+  (the header has no moulded mark), and print the cleaning and coating
+  prohibition plus the **sensor-liner removal step (after reflow, before the
+  cover glass)** on it.
 - Panelize the five carriers **identically oriented** so the optical axis and
   connector side match after separation. Add fiducials to the panel.
 - Provide the assembler with: MSL3 handling note, reflow limits, no-wash /
@@ -368,6 +373,7 @@ only, if scoping shows ringing. Do not fit them pre-emptively.
 | Reflow | 240 °C recommended, 260 °C maximum, **3 passes max**, convection only, not vapour phase |
 | Stencil | 90–150 µm, uniform paste |
 | Cleaning | **No wet cleaning** of the sensor |
+| Liner (V0GC/1 variant) | Reflow-compatible to 260 °C; **remove after reflow, before the cover glass.** A sensor with the liner left on reads nothing |
 | Coating | **Not recommended.** If required, mask the optical windows with a gasket/cap |
 | Environment | Class 1000 recommended if using the non-liner sensor variant |
 | Rework: desolder | ≤ 275 °C on the cap, < 60 s, protective cube |

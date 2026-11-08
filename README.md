@@ -92,7 +92,7 @@ ever active.
 
 | Ref | Part | Package | Purpose |
 |---|---|---|---|
-| U1 | VL53L8CXV0GC/1 (with liner) | LGA-16, 6.4 × 3.0 × 1.75 mm | The sensor. SPI mode, LPn and I²C_RST pulled up on board |
+| U1 | VL53L8CXV0GC/1 (with liner; liner removed after reflow) | LGA-16, 6.4 × 3.0 × 1.75 mm | The sensor. SPI mode, LPn and I²C_RST pulled up on board |
 | U2 | MIC5504-1.8YMT | DFN-4, 1.0 × 1.0 mm | 1.8 V LDO: CORE_1V8 + IOVDD + VCCA of U3/U5. EN tied to IN |
 | U3 | SN74AXC4T774RSVR | UQFN-16, 2.6 × 1.8 mm | SCLK / MOSI / MISO translator, **OE = NCS_S**, DIR1/2/3 = GND, DIR4 = 1V8 |
 | U5 | SN74AXC1T45 (DCK SC70-6 or DBV SOT-23-6) | SC70-6 / SOT-23-6 | NCS translator. **DIR = GND ⇒ B→A** (3.3 V host drives 1.8 V sensor) |
@@ -112,7 +112,7 @@ ever active.
 | R5 | 47 kΩ | 0402 | SPI_I2C_N → IOVDD (selects SPI) |
 | R6 | 6.8 kΩ | 0402 | SCLK_S → 1V8. Holds SCLK at its mode-3 idle level so selecting the board cannot create a spurious clock edge |
 | R7 | 4.7 kΩ | 0402 | NCS_H → 3V3. Keeps every board deselected while the host is in reset |
-| J1 | PH1-06-UA (Adam Tech) | THT 1×6, 2.54 mm | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS |
+| J1 | PH1-06-UA (Adam Tech), straight 1×6 | THT 1×6, 2.54 mm, 1.02 mm holes, body 2.50 mm | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS |
 
 ### 2.2 System BOM (outside the carriers)
 
@@ -404,9 +404,9 @@ datasheets (DS14161 Rev 7, SCES898C, SCES882E, TCA9406, MIC550x, TPS22918,
 Teensyduino core). Rounds 9–10 produced no BLOCKER/MAJOR/MINOR findings; round 11
 was a **verification pass**, not a review: 57 rows, **47 PASS / 10 NV / 0 FAIL**.
 
-There is nothing left to fix in the source. Nine of the ten NV rows are still
-open (R1 closed on paper once the TPS22918-Q1 datasheet was read); all are
-bench- or document-only closures:
+There is nothing left to fix in the source. Eight of the ten NV rows are still
+open (R1, R5 and the U1/J1 document checks have since closed); all are bench- or
+document-only closures:
 
 | ID | Open item | Closes by | If marginal |
 |---|---|---|---|
@@ -414,7 +414,7 @@ bench- or document-only closures:
 | R2 | MIC5504 turn-on endpoints | CORE_1V8 window per board (≤ 58.3 µs) | Different LDO needed |
 | R3 | ST firmware's actual 320 B block set | successful `start_ranging` | Re-audit the trim |
 | R4 | Re-init of a **streaming** sensor | forced-demote test | Add a rail cycle to the retry path (switch already supports it) |
-| R5 | U3 (SN74AXC4T774 RSV) pin numbers — U5 is now closed (1 VCCA, 2 GND, 3 A, 4 B, 5 DIR, 6 VCCB) | TI pinout figure **before** layout | U3 net rework |
+| R5 | U3 (SN74AXC4T774 RSV) and U5 (SN74AXC1T45) pin numbers | **Closed** — U3: VCCA 14, VCCB 13, GND 8, OE 7, A1–A4 1–4, B1–B4 12–11–10–9, DIR1/2 15/16, DIR3/4 5/6 (TI Fig. 4-3 / Table 4-1); U5: 1–6 as listed above | — |
 | R6 | MISO_H idle with five Hi-Z boards | scope | 47 kΩ host pull-down |
 | R7 | I²C rise time at 400 kHz | scope ≤ 300 ns | 1.5 kΩ pull-ups |
 | R8 | LPSPI SCK duty (RM-derived 50 %) | scope 40–60 % | Clock-root change (very unlikely) |
