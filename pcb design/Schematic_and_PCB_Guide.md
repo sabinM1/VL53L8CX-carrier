@@ -322,6 +322,8 @@ only, if scoping shows ringing. Do not fit them pre-emptively.
 ## 9. Fabrication outputs
 
 - Gerbers: 2 layers, 1.6 mm, 1 oz, ENIG preferred.
+- BOM: `BOM.csv` in this folder — one file, carrier and system rows, DNP options
+  at Qty 0. Send the carrier rows to the assembler, not the whole file.
 - Drill file with the 0.3 mm thermal vias called out (plugged or tented).
 - **Stencil**: 90–150 µm, with the thermal-pad apertures split into the eight
   rectangles; do not let the stencil house merge them into one opening.

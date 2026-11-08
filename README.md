@@ -126,6 +126,9 @@ ever active.
 | — | 3.3 V supply | ≥ 1.5 A, 3.3 V ±3 % at the far board | 1 |
 | — | Harness | ≤ 20 cm, one ground wire per board, round-trip supply R < 0.15 Ω | 1 |
 
+A machine-readable version of both tables is in `pcb design/BOM.csv` (one file,
+carrier and system rows, DNP options flagged with Qty 0).
+
 ### 2.3 Why these parts
 
 - **MIC5504-1.8** — 150 mA, ±2.5 % over temperature ⇒ 1.755–1.845 V, inside the
@@ -327,6 +330,7 @@ Design_proposal.txt           full design record: architecture, BOM, netlist,
                               confidence tags, per-round review tables
 pcb design/
   Schematic_and_PCB_Guide.md  step-by-step schematic + PCB instructions
+  BOM.csv                     machine-readable carrier + system BOM (with DNP rows)
   *.pdf                       DS14161, AN5897 thermal, PCB manufacturing
 reference docs/               markdown conversions of the ST documents
 code/
