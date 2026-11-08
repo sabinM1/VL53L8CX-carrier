@@ -6,7 +6,8 @@ five working carriers. The detailed capture/layout instructions live in
 the gates, and the bench procedure.
 
 Everything below assumes the production topology: **Mode A** (one SPI bus, five
-CS lines). Do not build the I²C carrier variant.
+CS lines). Mode B and Mode C are documented in `README.md` §3 for reference but
+are not implemented and are not part of any checklist here.
 
 ---
 
@@ -38,14 +39,11 @@ here with the instrument that closes it and whether your kit is sufficient.
 | 16 | `start_ranging` OK (R3) | status 0 | Serial terminal | **Yes** |
 | 17 | Re-init while streaming (R4) | frames resume | Serial terminal, send `r` | **Yes** |
 | 18 | Remove/restore a sensor | −1, then recovery | Serial terminal | **Yes** |
-| 19 | I²C clock 400 kHz (Mode B) | ±5 % | LogicAnalyzer V6.0 | **Yes** |
-| 20 | I²C rise time (R7, Mode B) | ≤ 300 ns | **Scope ≥ 20 MHz** | **No** — borrow one; only if Mode B is built |
-| 21 | I²C NACK drill (Mode B) | demotion, no hang | Serial terminal | **Yes** |
-| 22 | 1 h soak, current drift | < 10 % | Bench PSU / DMM | **Yes** |
-| 23 | LDO temperature (optional) | no hotspot | Touch or thermal camera | Optional |
+| 19 | 1 h soak, current drift | < 10 % | Bench PSU / DMM | **Yes** |
+| 20 | LDO temperature (optional) | no hotspot | Touch or thermal camera | Optional |
 
-The only gap in your kit is **row 20**, and it only exists if you deliberately
-build Mode B. Rows 1–9, 10, 11–19 and 21–22 are fully covered.
+Every measurement in this project is covered by your kit. There is no scope-gap
+row: Mode B (the only thing that would need a faster scope) is not implemented.
 
 ### 0.1 LogicAnalyzer V6.0 — what it can and cannot do
 
@@ -62,7 +60,6 @@ It cannot replace an oscilloscope for this project:
 |---|---|---|
 | R2 CORE_1V8 0.9→1.6 V ≤ 58.3 µs | **No** | One digital threshold; cannot time the 0.9 V and 1.6 V crossings |
 | R6 MISO_H idle ≈ 0 V | **No** | Reports 0/1 against a threshold, not the DC level of a floating node |
-| R7 I²C rise time ≤ 300 ns | **No** | Rise time is an analog 0.3→0.7×VDD measurement |
 | R8 SPI clock 2.85–3.15 MHz, duty 40–60 % | **Yes** | Digital timing; use **8-channel mode at 100 Msps** for duty resolution |
 | R9 far-end AVDD ≥ 3.13 V | **No** | Needs a DMM (or a scope) |
 
@@ -76,7 +73,6 @@ CS-to-first-clock ≥ 1 µs, SPI mode-3 idle levels, one-driver-at-a-time MISO,
 |---|---|
 | LogicAnalyzer V6.0 + probes | R8, SPI/I²C decode, CS/OE timing |
 | Portable DSO, 200 kHz / 2.5 MS/s (10× probe) | **R2 and R6 only** — see §0.3 |
-| Oscilloscope ≥ 20 MHz, 2 ch | R7 (I²C rise time) — Mode B only |
 | DMM | R9, continuity, harness resistance, 1V8 accuracy |
 | Bench supply 0–5 V, ≥ 2 A, current limit | 3.3 V rail; set 2 A for inrush, ~0.75 A for soak |
 | USB serial terminal | R3, R4, CSV capture |
@@ -94,13 +90,11 @@ checks and nothing fast:
 | R2 CORE_1V8 0.9→1.6 V ≤ 58.3 µs | **Yes** | The edge is ~25–49 µs; 1.75 µs of smoothing is a few percent and errs long (conservative) |
 | Load-switch t_R ≈ 95 µs, QOD decay τ ≈ 1 ms | **Yes** | Both are ≫ 1.75 µs |
 | R6 MISO_H idle ≈ 0 V | **Yes, with a caveat** | DC measurement. A 10 MΩ probe can pull a *truly floating* node to 0 V and hide the fault. The design biases it through 14.2 kΩ, so a real float is unlikely; if in doubt, lift the probe and confirm with a 1 MΩ pull-up test or a DMM |
-| R7 I²C rise time ≤ 300 ns | **No** | 1.75 µs rise time cannot resolve 300 ns. Needs ≥ 20 MHz (Mode B only) |
 | R8 SPI 3 MHz duty | **No** | 200 kHz cannot see 3 MHz. Use the LogicAnalyzer |
 | R9 AVDD ≥ 3.13 V | **No** | Use the DMM |
 
 So the portable scope plus the V6.0 logic analyzer covers R2, R3, R4, R6 and R8.
-R7 only matters if you build Mode B; if you do, borrow a ≥ 20 MHz scope for that
-one measurement.
+No measurement in the implemented design needs a faster scope.
 
 ---
 
@@ -255,10 +249,6 @@ is a different LDO or accepting the input-tracking case after measuring it.
 ### B8 — Soak
 - [ ] 1 h: zero unexplained demotions, current drift < 10 %, CSV continuous.
 
-### B9 — Mode B only if built
-- [ ] I²C 400 kHz ±5 %, rise time ≤ 300 ns at the far end; else 2.2 kΩ → 1.5 kΩ.
-- [ ] NACK drill: power off one I²C sensor → demotion in ~50–100 ms, no hang.
-
 ---
 
 ## 6. Closure register
@@ -269,7 +259,6 @@ is a different LDO or accepting the input-tracking case after measuring it.
 | R3 | 320 B block set | B4 successful `start_ranging` | Re-audit the trim |
 | R4 | Re-init while streaming | B7 serial `r` | Rail cycle in the retry path |
 | R6 | MISO_H idle | B3 scope/DMM | 47 kΩ host pull-down |
-| R7 | I²C rise time (Mode B) | B9 scope, ≤ 300 ns | 1.5 kΩ pull-ups |
 | R8 | SPI duty/frequency | B5 logic analyzer | Clock-root change (unlikely) |
 | R9 | Far-end AVDD | B1 DMM ≥ 3.13 V | Shorten/upgrade harness |
 | R10 | Build record | Done (Rev 8) | — |

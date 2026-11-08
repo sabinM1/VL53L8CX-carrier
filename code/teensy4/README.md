@@ -13,9 +13,8 @@ high side (VCCA/VCCB) and the LDO.
 |---|---|---|
 | `single_sensor_bringup/` | — | One sensor on `SPI` (header pins). Start here. |
 | `mode_a_single_bus/` | **A** | All 5 on `SPI`, one CS each, polled sequentially. |
-| `mode_b_multi_bus/` | **B** | 5 sensors across 3 SPI + 2 I2C, one per bus, concurrent. |
 
-All three compile for `teensy:avr:teensy40` (arduino-cli).
+Both compile for `teensy:avr:teensy40` (arduino-cli).
 
 ## Pin maps (Teensy 4.0)
 
@@ -47,38 +46,33 @@ Only **pins 0–23 are breadboardable**; **24–39 are bottom SMT pads**.
 - **Do not use Wire1's alt pins 36/37** — they collide with SPI2.
 - Pins 16/17 are Serial4 RX/TX. No conflict unless Serial4 is used.
 
-## Mode A vs Mode B
+## Mode A vs Mode B (Mode B documented, not implemented)
 
 **Mode A** — one SPI bus (`SPI`, header pins), one CS per sensor (10,9,8,7,6),
-sequential reads. Header-only, so easiest to bring up.
+sequential reads. Header-only, so easiest to bring up. This is the only
+implemented topology.
 
-**Mode B — do not fabricate the I2C carrier variant for this build.**
+**Mode B is documentation only.** There is no sketch in this repository and the
+I2C carrier variant is not built. It is recorded here so the option is not lost:
+one sensor per bus (S0 `SPI`, S1 `SPI1`, S2 `SPI2`, S3 `Wire`, S4 `Wire1`), S1 and
+S2 on soldered bottom pads, one sensor per I2C bus to keep address `0x52`.
 
-One sensor per bus: S0 `SPI`, S1 `SPI1`, S2 `SPI2`, S3 `Wire`, S4 `Wire1`. S1 and
-S2 need soldered bottom pads; one sensor per I2C bus keeps the default address
-`0x52`. The five range concurrently and the MCU drains each bus in turn.
-
-Numbers (round 7): a trimmed frame read costs ~0.97 ms on SPI at 3 MHz, so a
-worst-case pass where all five are simultaneously ready is **~4.9 ms = 7.3 %**
-of a 66.7 ms frame. 8×8 tops out at 15 Hz (api.h), so Mode A's sequential
-polling was never the bottleneck and the trim removed Mode B's only real
-advantage. Mode B still costs a TCA9406 plus pull-up engineering per I2C
-carrier, two strap changes, bottom-pad soldering for SPI1/SPI2 anyway, and an
-extra failure class (a stuck-SDA slave needs a rail power cycle). Keep the
-sketch and the hardware deltas as documented options; build Mode A.
+Numbers: a trimmed frame read costs ~0.97 ms on SPI at 3 MHz, so a worst-case
+Mode A pass where all five are simultaneously ready is **~4.9 ms = 7.3 %** of a
+66.7 ms frame. 8×8 tops out at 15 Hz (api.h), so sequential polling was never the
+bottleneck. Mode B would cost a TCA9406 plus pull-up engineering per I2C carrier,
+two strap changes, bottom-pad soldering for SPI1/SPI2 anyway, and an extra
+failure class (a stuck-SDA slave needs a rail power cycle).
 
 If bus isolation is ever needed, or the array grows past five sensors, the next
 step is **`SPI` + `SPI1`** (3+2, one CS each, identical carriers), not I2C.
 
-**Mode C (five SPI masters via FlexIO) — not built.** `FlexIOSPI` is mode 0
-only (it never programs `_dataMode`), so it cannot talk to the VL53L8CX without
-patching an unmaintained library. It also buys no throughput: sampling is
-already concurrent in Mode A/B, and the transfer is CPU-polled in every case.
-With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
-66 ms period. Keep Mode A as the production topology. See
+**Mode C (five SPI masters via FlexIO) — dropped.** `FlexIOSPI` is mode 0 only
+(it never programs `_dataMode`), so it cannot talk to the VL53L8CX without
+patching an unmaintained library. It also buys no throughput. See
 `review/FLEXIO_ANALYSIS.md`.
 
-## I2C specifics (verified)
+## Mode B I2C specifics (documented, not implemented)
 
 - **Wire buffer:** Teensy `WireIMXRT.h` sets `BUFFER_LENGTH 136`; the tx buffer
   is 137 bytes. The library writes 2 address bytes + `DEFAULT_I2C_BUFFER_LEN` per
@@ -86,7 +80,6 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
   patched library** (`vl53l8cx_platform_config_custom.h`, `#if defined(__IMXRT1062__)
   → 128`), not in the sketch: `IO_Read`/`IO_Write` are inline members, so a
   sketch-level `#define` only changed the sketch's own translation unit.
-  `mode_b` fails to compile unless the cap is present and ≤ 128.
 - **I2C clock: 400 kHz.** With the trimmed ~320 B frame a full read is
   (2 addr + 320) × 9 bits ≈ **7.3 ms**, so two I2C sensors use ~22 % of a 66.7 ms
   frame. 1 MHz (the DS14161 limit) is not needed and makes the rise-time budget
@@ -105,18 +98,16 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
   when OE is low, VCC isolation if either rail is at GND.
 - **The AXC4T774 cannot translate SDA** (unidirectional per channel).
 
-## Hardware deltas for the I2C carrier variant (not drawn)
+## Hardware deltas for the I2C carrier variant (documented, not implemented)
 
 1. Bidirectional Fm+ I2C translator (**TCA9406**) for SDA/SCL.
-2. `SPI_I2C_N` pulled **low** for I2C (R5 currently pulls it high = SPI). A fixed
-   pull-down removes the bus-reset capability UM3109 mentions; a GPIO is better.
-3. `SPI_I2C_N` (C1) pulled **low** for I²C (R5 currently pulls it high = SPI). A
+2. `SPI_I2C_N` (C1) pulled **low** for I²C (R5 currently pulls it high = SPI). A
    fixed pull-down removes the bus-reset capability UM3109 mentions; a GPIO is
    better. Note that this is the same pin the datasheet calls the I²C interface
    reset — there is no separate `I2C_RST` pin on the VL53L8CX.
-4. Header exposes SDA/SCL.
-5. External I2C pull-ups on both rails (1.8 V sensor side, 3.3 V host side).
-6. `SYNC` (B1) is not a "start-of-frame align" line: UM3109 §4.15 describes it as
+3. Header exposes SDA/SCL.
+4. External I2C pull-ups on both rails (1.8 V sensor side, 3.3 V host side).
+5. `SYNC` (B1) is not a "start-of-frame align" line: UM3109 §4.15 describes it as
    a per-acquisition trigger used to avoid interference. Do not tie all five
    together expecting simultaneity; use separate/staggered lines if needed.
 
@@ -129,7 +120,7 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
   `stop_ranging()` would poll its MCU-stop bit for ~5 s. `init()` begins with a
   software reboot, so `bring_up()` does not need the device stopped first.
 - **Rail enable.** The external 3.3 V rail is behind a load switch whose ON pin
-  has a 100 kΩ pull-down, so it is **off at every reset**. All three sketches
+  has a 100 kΩ pull-down, so it is **off at every reset**. Both sketches
   define `RAIL_EN_PIN = 2` and assert it in the first lines of `setup()`, before
   `park_all_ncs_high()` — driving a CS while the rail is off feeds ~0.7 mA per
   board through R7 into the dead node. Do not move that call order.
@@ -233,4 +224,4 @@ size `0x15000`. 350 KB of RAM1 stays free; not worth a linker-script hack.
    command forces a re-init while the sensor is streaming — that is the R4
    test (no `stop_ranging()`).
 2. `mode_a_single_bus` with all five on `SPI`.
-3. `mode_b_multi_bus` after the I2C carriers and bottom-pad harness exist.
+3. Done. Mode B has no sketch and is not part of the build.

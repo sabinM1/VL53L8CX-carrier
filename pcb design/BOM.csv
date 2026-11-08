@@ -16,7 +16,7 @@ R1,Carrier,5,47 kohm,RC0402DR-0747KL,0402,NCS_S pull-up to 1V8,CONFIRMED Yageo R
 R2,Carrier,5,47 kohm,RC0402DR-0747KL,0402,INT pull-up to 1V8,INT not routed to host
 R3,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SYNC pull-up to 1V8,Do not tie SYNC across boards
 R4,Carrier,5,47 kohm,RC0402DR-0747KL,0402,LPn pull-up to 1V8,Device always enabled
-R5,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SPI_I2C_N pull-up to 1V8,Selects SPI; Mode B variant pulls this low
+R5,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SPI_I2C_N pull-up to 1V8,Selects SPI mode
 R6,Carrier,5,6.8 kohm,AC0402FR-076K8L,0402,SCLK_S pull-up to 1V8,SOURCED Yageo AC 6.8 kohm +/-1 % (F); replaces the 10 kohm part AC0402DR-0710KL; 1.64 V idle vs V_IH 1.26 V; within TI's <= 7 kohm limit
 R7,Carrier,5,4.7 kohm,RE0402DRE074K7L,0402,NCS_H pull-up to 3V3,CONFIRMED Yageo RE 4.7 kohm +/-0.5 % 50 ppm; keep board-side
 J1,Carrier,5,1x6 header 2.54 mm,PH1-06-UA (Adam Tech),THT 1x6 2.54 mm,Carrier interface,SOURCED; STRAIGHT/vertical; 1.02 mm holes on 2.54 mm pitch; 3 A per contact; gold flash; no moulded pin-1 mark so silkscreen it; 3V3_EXT / GND / SCLK / MOSI / MISO / NCS
@@ -32,4 +32,3 @@ T4,System,1,Teensy 4.0,TEENSY40,-,Host,Powered from USB only; 3.3 V pin never fe
 ST1,System,1,Stencil 90-150 um,from PCB fab,-,Assembly tool,Do not merge the thermal-pad apertures into one opening
 R8,System,0,22 ohm (optional),TO SOURCE,0402,SCLK/MOSI series damping at host end,DNP; fit only if scoping shows ringing; one set at the host
 R9,System,0,47 kohm (optional),RC0402DR-0747KL,0402,Optional MISO_H pull-down at host,DNP; only if MISO_H floats with all boards deselected; never a pull-up
-U6,Carrier (Mode B only),0,TCA9406,TO SOURCE,VSSOP-8,Bi-directional I2C translator,DNP; Mode B carrier variant only; also requires R5 pull-down and SPI_I2C_N low (that pin is the I2C-mode reset)

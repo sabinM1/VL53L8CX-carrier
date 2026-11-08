@@ -445,9 +445,9 @@ rework. Do not exceed 260 °C on the cap under any circumstance.
    that the trim is accepted.
 6. Then follow `../README.md` §8 (bring-up checklist) for the full sequence.
 
-Only build the I²C carrier variant if you deliberately choose Mode B; it needs
-a TCA9406, different strap resistors (`SPI_I2C_N` low — that pin is also the
-I²C-mode reset) and I²C pull-ups on both rails. The production build is Mode A.
+Mode B (3 SPI + 2 I²C) and Mode C (FlexIO) are documented in `../README.md` §3
+for reference only. Neither is implemented: there is no I²C carrier variant, no
+TCA9406 in the BOM and no Mode B sketch. Build the Mode A carrier only.
 
 ---
 

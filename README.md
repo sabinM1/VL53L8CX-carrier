@@ -158,10 +158,10 @@ carrier and system rows, DNP options flagged with Qty 0).
 - **R7 = 4.7 kΩ board-side** — do not move the NCS pull-ups to the host. Host
   off + rail on would then enable all five U3s into a dead Teensy pad. The load
   switch removes the whole problem: host off ⇒ rail dead ⇒ everything unpowered.
-- **Spring for the TCA9406 only if you build Mode B.** It is an Fm+ (1 MHz)
-  bidirectional I²C translator; the PCA9306 is a 400 kHz part and the AXC4T774
-  cannot translate SDA at all. The I²C carrier variant is **not** part of this
-  build.
+- **No I²C translator is fitted.** Mode B (3 SPI + 2 I²C) is documented in §3
+  for reference only; it is not implemented. If it were ever built it would need
+  an Fm+ translator (TCA9406) plus a second strap change — the AXC4T774 cannot
+  translate SDA.
 
 ---
 
@@ -170,7 +170,7 @@ carrier and system rows, DNP options flagged with Qty 0).
 | Mode | Buses | Concurrency | Status |
 |---|---|---|---|
 | **A** | `SPI` only (SCK 13, MOSI 11, MISO 12), one CS per sensor (10, 9, 8, 7, 6) | Sequential polling | **Production topology.** Build this |
-| **B** | 3 SPI + 2 I²C, one sensor per bus | Concurrent | Documented option. Do **not** fabricate the I²C carrier variant |
+| **B** | 3 SPI + 2 I²C, one sensor per bus | Concurrent | **Documented only — not implemented.** No sketch, no carrier variant, no BOM part |
 | C | Five FlexIO SPI masters | Concurrent | **Dropped** — `FlexIOSPI` cannot do mode 3, and it buys no throughput |
 
 **Why Mode A wins.** A trimmed 320 B frame costs ≈0.97 ms on SPI at 3 MHz, so a
@@ -178,10 +178,11 @@ worst-case pass with all five sensors ready is ≈4.9 ms — 7.3 % of a 66.7 ms
 frame. 8×8 tops out at 15 Hz anyway, so the sequential poll was never the
 bottleneck.
 
-**Mode B layout** (only if you deliberately build it): S0 `SPI` (13/11/12, CS 10),
-S1 `SPI1` (27/26/1, CS 0), S2 `SPI2` (37/35/34, CS 36), S3 `Wire` (SDA 18 / SCL 19),
-S4 `Wire1` (SDA 17 / SCL 16). One sensor per I²C bus keeps the default address
-`0x52`. SPI1 SCK/MOSI and all of SPI2 are **bottom SMT pads**, not header pins.
+**Mode B layout** (documented for reference; not implemented): S0 `SPI`
+(13/11/12, CS 10), S1 `SPI1` (27/26/1, CS 0), S2 `SPI2` (37/35/34, CS 36),
+S3 `Wire` (SDA 18 / SCL 19), S4 `Wire1` (SDA 17 / SCL 16). One sensor per I²C
+bus keeps the default address `0x52`. SPI1 SCK/MOSI and all of SPI2 are **bottom
+SMT pads**, not header pins.
 
 **If you ever need bus isolation or more than five sensors**, the next step is
 `SPI` + `SPI1` (3+2, identical carriers), not I²C.
@@ -210,7 +211,7 @@ reset.
 
 Only **pins 0–23 are breadboardable**; 24–39 are bottom SMT pads.
 
-| Function | Mode A | Mode B | Teensy peripheral |
+| Function | Mode A | Mode B (documented) | Teensy peripheral |
 |---|---|---|---|
 | SCLK | 13 | 13 (S0), 27 (S1), 37 (S2) | LPSPI4 / LPSPI3 / LPSPI1 |
 | MOSI | 11 | 11 (S0), 26 (S1), 35 (S2) | — |
@@ -279,13 +280,12 @@ switch and therefore does not buffer sag in the harness after it.
 
 ## 6. Firmware
 
-Three sketches, all compiling for `teensy:avr:teensy40`:
+Two sketches, both compiling for `teensy:avr:teensy40`:
 
 | Sketch | Use |
 |---|---|
 | `code/teensy4/single_sensor_bringup/` | First light: one carrier on header SPI (13/11/12, CS 10) |
 | `code/teensy4/mode_a_single_bus/` | **Production:** five carriers on `SPI`, sequential |
-| `code/teensy4/mode_b_multi_bus/` | 3 SPI + 2 I²C, concurrent (optional) |
 
 ### Build
 
@@ -300,8 +300,8 @@ arduino-cli compile --fqbn teensy:avr:teensy40 \
 Use `--libraries "code/drivers_libraries"` so the patched library wins over any
 stock copy in
 `Documents/Arduino/libraries`. Verified with arduino-cli 1.5.1 / teensy:avr
-1.62.0. Footprints (Rev 8): Mode A 46 736 flash / 108 576 RAM1; Mode B
-47 904 / 110 624; bring-up 46 032 / 99 040.
+1.62.0. Footprints (Rev 8): Mode A 46 736 flash / 108 576 RAM1; bring-up
+46 032 / 99 040.
 
 ### The vendored library is patched — do not replace it
 
@@ -364,7 +364,7 @@ pcb design/
   *.pdf                       DS14161, AN5897 thermal, PCB manufacturing
 reference docs/               markdown conversions of the ST documents
 code/
-  teensy4/                    three sketches + firmware README
+  teensy4/                    two sketches + firmware README
   drivers_libraries/          vendored, patched VL53L8CX library
 review/
   CONTEXT.md                  one-page project context + review history
@@ -410,12 +410,8 @@ Numbers are pass criteria, not suggestions.
 13. Rail current 400–550 mA sustained; scope far-board AVDD ≥ 3.13 V.
 14. 10-minute thermal check on the five LDOs (~135 mW each).
 
-**Stage 3 — Mode B only if built**
-15. I²C at 400 kHz, rise time ≤ 300 ns at the far end; else 2.2 kΩ → 1.5 kΩ.
-16. NACK drill: power off one I²C sensor → demotion in ~50–100 ms, no bus hang.
-
-**Stage 4 — sign-off**
-17. 24 h soak: zero unexplained demotions, current drift < 10 %, CSV continuous.
+**Stage 3 — sign-off**
+15. 24 h soak: zero unexplained demotions, current drift < 10 %, CSV continuous.
 
 ---
 
@@ -438,8 +434,7 @@ could not read):
 | U1 C5 (`MISO`) | I²C mode: do not connect — matches the SPI-only design. |
 | U1 C2 (`NCS`) | SPI: active-low chip select, 47 kΩ pull-up (R1 on NCS_S). |
 
-Nothing is left to fix in the source. Eight of the ten NV rows are still
-open (R1, R5 and the U1/J1 document checks have since closed); all are bench- or
+Nothing is left to fix in the source. The remaining NV rows are bench- or
 document-only closures:
 
 | ID | Open item | Closes by | If marginal |
@@ -450,10 +445,9 @@ document-only closures:
 | R4 | Re-init of a **streaming** sensor | forced-demote test | Add a rail cycle to the retry path (switch already supports it) |
 | R5 | U3 (SN74AXC4T774 RSV) and U5 (SN74AXC1T45) pin numbers | **Closed** — U3: VCCA 14, VCCB 13, GND 8, OE 7, A1–A4 1–4, B1–B4 12–11–10–9, DIR1/2 15/16, DIR3/4 5/6 (TI Fig. 4-3 / Table 4-1); U5: 1–6 as listed above | — |
 | R6 | MISO_H idle with five Hi-Z boards | scope | 47 kΩ host pull-down |
-| R7 | I²C rise time at 400 kHz | scope ≤ 300 ns | 1.5 kΩ pull-ups |
-| R8 | LPSPI SCK duty (RM-derived 50 %) | scope 40–60 % | Clock-root change (very unlikely) |
+| R8 | LPSPI SCK duty (RM-derived 50 %) | logic analyzer 40–60 % | Clock-root change (very unlikely) |
 | R9 | Far-end AVDD under the real harness | DMM under peak load ≥ 3.13 V | Shorten / upgrade harness |
-| R10 | Rev-8 compile/RAM numbers | **Closed** — Arduino CLI 1.5.1 / teensy:avr 1.62.0: Mode A 46 736 / 108 576, Mode B 47 904 / 110 624, bring-up 46 032 / 99 040 | — |
+| R10 | Rev-8 compile/RAM numbers | **Closed** — Arduino CLI 1.5.1 / teensy:avr 1.62.0: Mode A 46 736 / 108 576, bring-up 46 032 / 99 040 | — |
 
 Only **R4** could force a design change. Everything else has a measurement that
 either passes or has a staged fallback already designed in.
