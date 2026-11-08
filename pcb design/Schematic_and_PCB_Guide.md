@@ -130,8 +130,8 @@ whole scheme; keep it.
 
 1. `IN` = `3V3`, `OUT` = `1V8`, `GND` = `GND`, `EN` = `IN`.
 2. C6 (2.2 µF) at IN, C7 (1 µF) at OUT, both within a few mm in layout.
-3. Confirm the MIC5504 pin numbers from the Microchip datasheet during capture;
-   the project record lists them as not yet re-verified.
+3. UDFN pinout is **1 = VOUT, 2 = GND, 3 = EN, 4 = VIN, exposed pad = GND**
+   (confirmed from the Microchip datasheet). The EP is not optional — connect it.
 4. Add a note: *"EN tied to IN — the 3V3 rail edge does the sequencing."*
 
 ### 3.3 SPI translator (U3, SN74AXC4T774)
@@ -159,8 +159,9 @@ whole scheme; keep it.
    side. This is the required direction, and the arrow in older text that said
    "A→B" was wrong.
 3. C8 (100 nF) at VCCA, C9 (100 nF) at VCCB.
-4. **Confirm the SC70-6 / SOT-23-6 pin numbers on TI's package figure before
-   layout.** This is residual item R5; a wrong pinout means U5 net rework.
+4. Pin numbers and direction are **confirmed** from the TI datasheet (residual R5
+   is closed). If you hand-assemble, prefer DCK (SC70-6) or DBV (SOT-23-6); the
+   X2SON-6 DTQ part is 1.0 × 0.8 mm.
 
 ### 3.5 Passives
 
@@ -219,7 +220,7 @@ Run ERC, then check each row by hand. Every row must pass before layout.
 | S9 | Every IC has a 100 nF within a few mm in the placement plan | C1–C9 all used, none orphaned |
 | S10 | No net named `3V3` is connected to J1 pin 1 | J1 carries `3V3_EXT` |
 | S11 | DNC/RSVD pins match DS14161 Table 3 | Documented decision, not a guess |
-| S12 | U3 and U5 pin numbers match TI's pinout figures | Checked against the TI drawings |
+| S12 | Pin numbers match TI's pinout figures | U5 confirmed (1/2/3/4/5/6); U3 RSV still to check |
 | S13 | LDO EN = IN, no per-board enable network | No 2N7002, no RC |
 | S14 | No reset line to the sensor | Only the rail switch |
 | S15 | No part added or removed vs the 20-part BOM | Count = 20 |

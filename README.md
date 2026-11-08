@@ -131,9 +131,10 @@ carrier and system rows, DNP options flagged with Qty 0).
 
 ### 2.3 Why these parts
 
-- **MIC5504-1.8** — 150 mA, ±2.5 % over temperature ⇒ 1.755–1.845 V, inside the
-  sensor's 1.62–1.98 V window. Its ~25 Ω auto-discharge keeps the 1.8 V rail
-  from creeping up while the rail is off. 1.8 V peak per board is ~90 mA.
+- **MIC5504-1.8** — 300 mA, output ±2 % initial and ±3 % over temperature
+  ⇒ 1.746–1.854 V, inside the sensor's 1.62–1.98 V window. Its ~25 Ω
+  auto-discharge keeps the 1.8 V rail from creeping up while the rail is off.
+  1.8 V peak per board is ~90 mA.
 - **SN74AXC4T774** — 4-bit AXC translator; 71 kΩ typical internal pull-downs on
   the data I/Os, which is what biases an idle MISO when all boards are
   deselected (≈14.2 kΩ across five boards, i.e. MISO_H sits near 0 V — no
@@ -245,7 +246,7 @@ of SCLK and MOSI only if you see ringing.
 | Rail | Source | Load | Notes |
 |---|---|---|---|
 | 3.3 V AVDD / VCCB | External, switched | 465 mA typ, 750 mA peak for all five | ≥ 1.5 A supply, 3.3 V ±3 % at the far board |
-| 1.8 V CORE/IOVDD/VCCA | U2 per board | ~90 mA peak per board | 1.755–1.845 V; 135 mW dissipated per LDO |
+| 1.8 V CORE/IOVDD/VCCA | U2 per board | ~90 mA peak per board | 1.746–1.854 V; 135 mW dissipated per LDO |
 | Teensy | USB | ~40–100 mA | Never feeds the sensors |
 
 Slew requirements from DS14161 Table 5 (these are **minimums**):
@@ -403,7 +404,7 @@ document-only closures:
 | R2 | MIC5504 turn-on endpoints | CORE_1V8 window per board (≤ 58.3 µs) | Different LDO needed |
 | R3 | ST firmware's actual 320 B block set | successful `start_ranging` | Re-audit the trim |
 | R4 | Re-init of a **streaming** sensor | forced-demote test | Add a rail cycle to the retry path (switch already supports it) |
-| R5 | SCES882E pin numbers for U5 | TI package figure **before** layout | U5 net rework |
+| R5 | U3 (SN74AXC4T774 RSV) pin numbers — U5 is now closed (1 VCCA, 2 GND, 3 A, 4 B, 5 DIR, 6 VCCB) | TI pinout figure **before** layout | U3 net rework |
 | R6 | MISO_H idle with five Hi-Z boards | scope | 47 kΩ host pull-down |
 | R7 | I²C rise time at 400 kHz | scope ≤ 300 ns | 1.5 kΩ pull-ups |
 | R8 | LPSPI SCK duty (RM-derived 50 %) | scope 40–60 % | Clock-root change (very unlikely) |

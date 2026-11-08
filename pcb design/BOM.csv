@@ -1,35 +1,35 @@
 Reference,Assembly,Qty,Value,MPN,Package,Purpose,Notes
-U1,Carrier,5,VL53L8CX,VL53L8CXV9GC/1 or VL53L8CXV0GC/1,LGA-16 6.4x3.0x1.75 mm,8x8 multizone ToF sensor,SPI mode; MSL 3; no wet cleaning or coating; max 3 reflows
-U2,Carrier,5,MIC5504-1.8,MIC5504-1.8YMT,DFN-4 1.0x1.0 mm,1.8 V LDO for CORE_1V8 + IOVDD + VCCA,EN tied to IN; ~25 ohm auto-discharge; ~135 mW dissipation
-U3,Carrier,5,SN74AXC4T774,SN74AXC4T774RSVR,UQFN-16 2.6x1.8 mm,SCLK/MOSI/MISO 3.3 V <-> 1.8 V translator,OE = NCS_S; DIR1/2/3 = GND; DIR4 = 1V8; confirm RSV pinout on TI figure
-U5,Carrier,5,SN74AXC1T45,SN74AXC1T45DCKR (or DBVR),SC70-6 or SOT-23-6,NCS translator 3.3 V -> 1.8 V,DIR = GND (B->A); pin numbers to confirm (R5); orderable suffix TBD
-C1,Carrier,5,4.7 uF X5R 10 V,-,0402,AVDD decoupling at U1.C4,Check DC-bias derating at 3.3 V; use 0603 if marginal
-C2,Carrier,5,100 nF,-,0402,CORE_1V8 decoupling at U1.B7,Within 3 mm of pin
-C3,Carrier,5,100 nF,-,0402,IOVDD decoupling at U1.A3,Within 3 mm of pin
-C4,Carrier,5,100 nF,-,0402,U3 VCCA decoupling,Within 3 mm of U3
-C5,Carrier,5,100 nF,-,0402,U3 VCCB decoupling,Within 3 mm of U3
-C6,Carrier,5,2.2 uF X5R 10 V,-,0402,U2 input decoupling,At LDO input
-C7,Carrier,5,1 uF X5R 10 V,-,0402,U2 output decoupling,At LDO output
-C8,Carrier,5,100 nF,-,0402,U5 VCCA decoupling,Within 3 mm of U5
-C9,Carrier,5,100 nF,-,0402,U5 VCCB decoupling,Within 3 mm of U5
-R1,Carrier,5,47 kohm,-,0402,NCS_S pull-up to 1V8,Holds NCS_S high while U5 is indeterminate
-R2,Carrier,5,47 kohm,-,0402,INT pull-up to 1V8,INT not routed to host
-R3,Carrier,5,47 kohm,-,0402,SYNC pull-up to 1V8,Do not tie SYNC across boards
-R4,Carrier,5,47 kohm,-,0402,LPn pull-up to 1V8,Device always enabled
-R5,Carrier,5,47 kohm,-,0402,SPI_I2C_N pull-up to 1V8,Selects SPI; Mode B variant pulls this low
-R6,Carrier,5,6.8 kohm,-,0402,SCLK_S pull-up to 1V8,Holds mode-3 idle level; do not exceed 7 kohm
-R7,Carrier,5,4.7 kohm,-,0402,NCS_H pull-up to 3V3,Keeps board deselected at host reset; keep board-side
-J1,Carrier,5,1x6 header 2.54 mm,-,THT 1x6,Carrier interface,3V3_EXT / GND / SCLK / MOSI / MISO / NCS; add silk labels
+U1,Carrier,5,VL53L8CX,VL53L8CXV9GC/1 or VL53L8CXV0GC/1,LGA-16 6.4x3.0x1.75 mm,8x8 multizone ToF sensor,SPI mode; MSL 3; no wet cleaning or coating; max 3 reflows; TO SOURCE
+U2,Carrier,5,MIC5504-1.8,MIC5504-1.8YMT-TR,UDFN-4 1.0x1.0 mm (MT),1.8 V LDO for CORE_1V8 + IOVDD + VCCA,CONFIRMED datasheet; UDFN pinout 1=VOUT 2=GND 3=EN 4=VIN + EP to GND; EN high >= 1.2 V; 4 Mohm EN pull-down; 25 ohm auto-discharge; +/-3 % over temperature
+U3,Carrier,5,SN74AXC4T774,SN74AXC4T774RSVR,UQFN-16 2.6x1.8 mm (RSV),SCLK/MOSI/MISO 3.3 V <-> 1.8 V translator,OE = NCS_S; DIR1/2/3 = GND; DIR4 = 1V8; DIR and OE are VCCA-referenced; RSV PIN NUMBERS STILL TO CONFIRM
+U5,Carrier,5,SN74AXC1T45,SN74AXC1T45DTQR (X2SON-6) or DCKR (SC70-6) or DBVR (SOT-23-6),X2SON-6 1.0x0.8 mm / SC70-6 / SOT-23-6,NCS translator 3.3 V -> 1.8 V,CONFIRMED datasheet; pins 1=VCCA 2=GND 3=A 4=B 5=DIR 6=VCCB; DIR = GND => B->A; DTQ is the smallest package - hard to hand-solder
+C1,Carrier,5,4.7 uF X5R 10 V,C1005X5R1A475K050BC,0402 (C1005),AVDD decoupling at U1.C4,CONFIRMED 4.7 uF 10 V X5R +/-10 %; check DC-bias derating at 3.3 V; raise to 0603 if residual < ~2 uF
+C2,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,CORE_1V8 decoupling at U1.B7,100 nF 10 V X5R decoded; tolerance J and thickness BB not listed in the supplied Yageo X5R catalog - verify on distributor page
+C3,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,IOVDD decoupling at U1.A3,Within 3 mm of pin; same caveat as C2
+C4,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U3 VCCA decoupling,Within 3 mm of U3; same caveat as C2
+C5,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U3 VCCB decoupling,Within 3 mm of U3; same caveat as C2
+C6,Carrier,5,2.2 uF X5R 10 V,C1005X5R1A225K050BC,0402 (C1005),U2 input decoupling,CONFIRMED 2.2 uF 10 V X5R +/-10 %; must stay >= 1 uF at 3.3 V DC bias
+C7,Carrier,5,1 uF X5R 10 V,MCASL105SB5105KFNA01,0402,U2 output decoupling,CONFIRMED Taiyo Yuden MCAS 1 uF 10 V (L) X5R (B5) +/-10 % (K); confirm case size and thickness on product page
+C8,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U5 VCCA decoupling,Within 3 mm of U5; same caveat as C2
+C9,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U5 VCCB decoupling,Within 3 mm of U5; same caveat as C2
+R1,Carrier,5,47 kohm,RC0402DR-0747KL,0402,NCS_S pull-up to 1V8,CONFIRMED Yageo RC 47 kohm +/-0.5 % 7-in reel; holds NCS_S high while U5 is indeterminate
+R2,Carrier,5,47 kohm,RC0402DR-0747KL,0402,INT pull-up to 1V8,INT not routed to host
+R3,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SYNC pull-up to 1V8,Do not tie SYNC across boards
+R4,Carrier,5,47 kohm,RC0402DR-0747KL,0402,LPn pull-up to 1V8,Device always enabled
+R5,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SPI_I2C_N pull-up to 1V8,Selects SPI; Mode B variant pulls this low
+R6,Carrier,5,6.8 kohm,TO SOURCE (AC0402DR-076K8L pending check),0402,SCLK_S pull-up to 1V8,DO NOT USE the older 10 kohm part AC0402DR-0710KL; 6.8 kohm gives 1.64 V idle vs V_IH 1.26 V and stays within TI's <= 7 kohm limit
+R7,Carrier,5,4.7 kohm,RE0402DRE074K7L,0402,NCS_H pull-up to 3V3,CONFIRMED Yageo RE 4.7 kohm +/-0.5 % 50 ppm; keep board-side
+J1,Carrier,5,1x6 header 2.54 mm,TO SOURCE (generic 1x6 2.54 mm THT),THT 1x6,Carrier interface,3V3_EXT / GND / SCLK / MOSI / MISO / NCS; add silk labels; pick a keyed or marked variant
 PCB,Carrier,5,VL53L8CX carrier PCB,-,2-layer FR4 1.6 mm 1 oz,Sensor carrier,ENIG preferred; copy DS14161 land pattern and AN5897 thermal pad
-U10,System,1,TPS22918-class load switch,TPS22918DBVR,SOT-23-6,Switched 3V3_EXT rail for all five carriers,>= 1.5 A; CT open (t_R ~95 us); confirm ON V_IH and QOD
-R10,System,1,100 kohm,-,0402,Load switch ON pull-down to GND,Rail must default off; datasheet states no internal pull-down
-C10,System,1,22 uF,-,0603,Load switch VIN reservoir,Reservoir against harness IR drop (~0.32 V on a load step)
-C11,System,1,1 uF,-,0402,Load switch VOUT decoupling,Counts toward the 36.5 uF downstream capacitance
-CB1,System,1,>= 47 uF,-,Radial or 1206,Bulk capacitor at the 3.3 V supply,Keep UPSTREAM of the load switch or inrush approaches 3 A
-PSU1,System,1,3.3 V supply >= 1.5 A,-,-,External sensor rail,3.3 V +/-3 % at the far board; 465 mA typ / 750 mA peak
-HAR1,System,1,Harness <= 20 cm,-,-,Host-to-carrier wiring,One ground wire per board; round-trip supply R < 0.15 ohm
-T4,System,1,Teensy 4.0,-,-,Host,Powered from USB only; 3.3 V pin never feeds the array
-ST1,System,1,Stencil 90-150 um,-,-,Assembly tool,Do not merge the thermal-pad apertures into one opening
-R8,Carrier,0,22 ohm (optional),-,0402,SCLK/MOSI series damping at host end,DNP; fit only if scoping shows ringing; one set at the host
-R9,System,0,47 kohm (optional),-,0402,Optional MISO_H pull-down at host,DNP; only if MISO_H floats with all boards deselected; never a pull-up
-U6,Carrier (Mode B only),0,TCA9406,-,VSSOP-8,Bi-directional I2C translator,DNP; Mode B carrier variant only; also requires R5 pull-down and I2C_RST low/GPIO
+U10,System,1,TPS22918-class load switch,TPS22918DBVR,SOT-23-6,Switched 3V3_EXT rail for all five carriers,>= 1.5 A; CT open (t_R ~95 us); CONFIRM orderable suffix and ON V_IH from the TI package table
+R10,System,1,100 kohm,RC0402DR-07100KL (suggested),0402,Load switch ON pull-down to GND,Rail must default off; datasheet states no internal pull-down; TO CONFIRM MPN
+C10,System,1,22 uF,TO SOURCE,0603,Load switch VIN reservoir,Pick >= 10 V X5R and check DC bias at 3.3 V; reservoir against harness IR drop (~0.32 V on a load step)
+C11,System,1,1 uF,MCASL105SB5105KFNA01,0402,Load switch VOUT decoupling,Reuse the C7 part; counts toward the 36.5 uF downstream capacitance
+CB1,System,1,>= 47 uF,TO SOURCE,Radial or 1206,Bulk capacitor at the 3.3 V supply,Keep UPSTREAM of the load switch or inrush approaches 3 A
+PSU1,System,1,3.3 V supply >= 1.5 A,TO SOURCE,-,External sensor rail,3.3 V +/-3 % at the far board; 465 mA typ / 750 mA peak
+HAR1,System,1,Harness <= 20 cm,TO SOURCE,-,Host-to-carrier wiring,One ground wire per board; round-trip supply R < 0.15 ohm
+T4,System,1,Teensy 4.0,TEENSY40,-,Host,Powered from USB only; 3.3 V pin never feeds the array
+ST1,System,1,Stencil 90-150 um,from PCB fab,-,Assembly tool,Do not merge the thermal-pad apertures into one opening
+R8,Carrier,0,22 ohm (optional),TO SOURCE,0402,SCLK/MOSI series damping at host end,DNP; fit only if scoping shows ringing; one set at the host
+R9,System,0,47 kohm (optional),RC0402DR-0747KL,0402,Optional MISO_H pull-down at host,DNP; only if MISO_H floats with all boards deselected; never a pull-up
+U6,Carrier (Mode B only),0,TCA9406,TO SOURCE,VSSOP-8,Bi-directional I2C translator,DNP; Mode B carrier variant only; also requires R5 pull-down and I2C_RST low/GPIO

@@ -242,7 +242,7 @@ Alternatives for the OE→NCS_S requirement:
 | 5 | DIR | GND (B→A: host to sensor) |
 | 6 | VCCB | 3V3 (+ C9 100 nF) |
 
-Pin numbers [V TI SCES882E Table 4-1]. DIR low = B→A [V]. Package: DCK (SC70-6) preferred for size, DBV (SOT-23-6) easier to hand-solder; orderable suffix to confirm at the distributor [U]. Propagation delay and DIR reference rail: not retrieved [U].
+Pin numbers [V TI SCES882E Table 4-1; re-confirmed from the `sn74axc1t45` conversion in `reference docs/components/`]. DIR low = B→A [V]. Package: DCK (SC70-6) preferred for size, DBV (SOT-23-6) easier to hand-solder, DTQ (X2SON-6 1.0 × 0.8 mm) smallest; orderable suffix to confirm at the distributor [U]. Propagation delay and DIR reference rail: DIR is referenced to VCCA [V]; propagation delay not retrieved [U].
 
 ### 5.3 Bus-level notes
 - Enable time of U3 after NCS_S falls is nanoseconds-to-tens-of-ns [U, not retrieved]; the host's first SCLK edge follows NCS by ≥ ~1 µs when NCS is a software GPIO, so margin is large. Do not drive NCS with a hardware CS that asserts within a few ns of the first clock.
@@ -450,7 +450,7 @@ Optional, not counted: R8 47 kΩ MOSI_S → 1V8 (if the sensor's MOSI input is s
 - `3V3_EXT` (J1-1) → net `3V3` → C1 (at U1.C4), U1.C4 (AVDD), U2.IN with C6 and **EN = IN**, U3.VCCB (pin 13) with C5, U5.VCCB (pin 6) with C9, R7. **Rev 5:** EN = IN stays; the rail is switched by the system load switch (§7 system BOM), whose ON pin is driven by **Teensy pin 2** (`RAIL_EN_PIN`, asserted in `setup()` before any CS/NCS is driven). There is no per-board EN network.
 - U2 (MIC5504-1.8): OUT = `1V8` with C7.
 - `1V8` feeds U1.A3 (with C3), U1.B7 (with C2), U3.VCCA (pin 14, with C4), U5.VCCA (pin 1, with C8), R1–R6.
-- MIC5504 pin numbers: per Microchip DS20006006C [U, not retrieved].
+- MIC5504 pin numbers: UDFN-4 pin 1 = VOUT, 2 = GND, 3 = EN, 4 = VIN, EP = GND [V — `reference docs/components/` MIC5501/2/3/4 conversion].
 
 **U3 SN74AXC4T774 (RSV; pin numbers [V Rev 1, SCES898C Table 4-1])**
 
@@ -474,7 +474,7 @@ Optional, not counted: R8 47 kΩ MOSI_S → 1V8 (if the sensor's MOSI input is s
 | 5 | DIR3 | GND (B→A: A3 driven low by B3, unused) |
 | 6 | DIR4 | 1V8 (A→B: sensor to host) |
 
-**U5 SN74AXC1T45:** pin 1 VCCA = 1V8; pin 2 GND; pin 3 A = NCS_S; pin 4 B = NCS_H (J1-6, R7 to 3V3); pin 5 DIR = GND; pin 6 VCCB = 3V3 [V Table 4-1]. **DIR = GND ⇒ B→A (B port output), i.e. the 3.3 V host side drives the 1.8 V sensor side — exactly what the design needs** [V SCES882E function table]. **⚠ SCES882E pin numbers are still unverified; confirm on TI's package figure before layout.**
+**U5 SN74AXC1T45:** pin 1 VCCA = `1V8`; pin 2 GND; pin 3 A = NCS_S; pin 4 B = NCS_H (J1-6, R7 to 3V3); pin 5 DIR = GND; pin 6 VCCB = 3V3 [V — sn74axc1t45 conversion in `reference docs/components/`]. **DIR = GND ⇒ B→A (B port output), i.e. the 3.3 V host side drives the 1.8 V sensor side — exactly what the design needs** [V SCES882E function table]. **Pin numbers are now confirmed** (round 13, item R5 closed); package options are DBV (SOT-23-6), DCK (SC70-6), DRL (SOT-5X3), DEA/DTQ (X2SON-6).
 
 **Nets that changed from Rev 1:** `NCS_S` now has four connections: U5 pin 3, U1.C2, R1, **U3 pin 7**. `NCS_H` connects only J1-6, U5 pin 4 and R7. `SCLK_S` adds R6.
 
@@ -547,7 +547,7 @@ AN5939 Rev 3 Table 5 [V]: air gap + glass < 1.5 mm; air gap < 0.5 mm without a g
 2. **Library and SPI were unproven on the RP2350.** Moot: the host is a Teensy 4.0 (core 1.62.0) and all three sketches compile.
 3. **1.8 V rail slew** per board (Rev 1 main risk, unchanged; limit is 58.3 µs, not 63 µs). Superseded by the load-switch decision (§13.9).
 4. **Edge-pin assignment** of the GPIOs is moot (Teensy header map, §13.3).
-5. **U3/U5 pin numbers** — U3 matches a secondary SCES898C mirror (confirm on TI's figure); SCES882E was not retrieved; confirm both before layout (§8).
+5. **U3/U5 pin numbers** — **U5 is confirmed** (VCCA 1, GND 2, A 3, B 4, DIR 5, VCCB 6; DIR = GND ⇒ B→A) and **MIC5504 is confirmed** (VOUT 1, GND 2, EN 3, VIN 4, EP) from the datasheet conversions in `reference docs/components/`. **U3 (RSV) pin numbers remain [U]** — the conversion has a pin-function table but no numbered pinout; confirm VCCA 14 / VCCB 13 / GND 8 / OE 7 / A1–A4 1–4 / B1–B4 12–9 / DIR1/2 15/16 / DIR3/4 5/6 on TI's drawing before layout (§8).
 6. **R7 back-feed** makes "any power-up order" false; the 3V3_EXT load switch is the fix (§13.9).
 5. **Worst-case current** assumes simultaneous 150 mA peaks; a real array may stay lower, but the supply should be sized for 750 mA.
 6. **Items I could not retrieve (Rev 5 status):** *resolved* — AXC4T774 tEN/tDIS (SCES898C §5.11: t_EN ≤ 26 ns, t_DIS ≤ 20 ns) and pull-down behaviour with OE high (71 kΩ static, §7.3.9); AXC1T45 DIR reference rail (VCCA); `vl53l8cx.h` constructor and API (all verified against the vendored source). *Still open, bench-only* — ME6217C33M5G dissipation/θJA, and the load switch's t_D at CT = 0 and reverse-current behaviour. Rev 1's list (TXU0304 pin map, TLV755P soft-start, etc.) no longer applies to this design except where noted.
@@ -898,3 +898,38 @@ One cosmetic evidence typo was noted: E8's 1.51 V idle figure is the 35.5 kΩ
 The only residual that can force a design change is **R4** (re-init of a
 streaming sensor); the load switch already provides the fallback (rail cycle in
 the retry path).
+
+### 13.14 Component-level verification (Rev 7, datasheet audit)
+
+The nine datasheet conversions in `reference docs/components/` were read and
+checked against the carrier BOM. **Note:** the files are mis-named — each file
+holds another part's content (e.g. `MIC5501-4_300mA_LDO.md` contains the
+SN74AXC4T774 text, `SN74AXC4T774_4bit_Level_Translator.md` contains the MIC5504
+text). Match by content, not filename, before re-uploading.
+
+| Item | Result |
+|---|---|
+| **U5 SN74AXC1T45 pin numbers** | **Closed (was R5).** 1 = VCCA, 2 = GND, 3 = A, 4 = B, 5 = DIR, 6 = VCCB. DIR = LOW ⇒ B→A, DIR is VCCA-referenced. Packages: DBV (SOT-23-6), DCK (SC70-6), DRL (SOT-5X3), DEA/DTQ (X2SON-6) |
+| **U2 MIC5504 pin numbers** | **Closed.** UDFN-4: 1 = VOUT, 2 = GND, 3 = EN, 4 = VIN, EP → GND. V_IH ≥ 1.2 V, V_IL ≤ 0.2 V, 4 MΩ EN pull-down, 25 Ω auto-discharge, 300 mA, 160 mV dropout at 300 mA, current limit 400–900 mA |
+| **U2 output accuracy** | **Corrected.** ±2 % initial but **±3 % over −40…+125 °C** ⇒ 1.746–1.854 V, not the ±2.5 % / 1.755–1.845 V previously recorded. Still inside the sensor's 1.62–1.98 V window |
+| **U3 SN74AXC4T774** | DIR and OE are **VCCA-referenced** — confirms DIR4 = 1V8 and OE = NCS_S in the 1.8 V domain. RSV **pin numbers are not in this conversion** (pin-function table only) and stay open |
+| **U3 internal pull-downs** | The 71 kΩ §7.3.9 figure is **not** in this conversion; that value still rests on the round-7 reading of the full SCES898C |
+| **Bypass guidance** | 0.1 µF near each supply pin; 1 µF + 0.1 µF in parallel improves transients (U3 recommendation) — C4/C5 and C8/C9 already satisfy the 0.1 µF part |
+
+Component list re-check (the list supplied was from the pre-Rev-4 design):
+
+- Usable as-is: `MIC5504-1.8YMT-TR`, `SN74AXC4T774RSVR`, `C1005X5R1A225K050BC` (C6),
+  `C1005X5R1A475K050BC` (C1), `MCASL105SB5105KFNA01` (C7, 1 µF X5R 10 V),
+  `RC0402DR-0747KL` (R1–R5), `RE0402DRE074K7L` (R7).
+- `SN74AXC1T45DTQR` — electrically correct, but DTQ is the X2SON-6 (1.0 × 0.8 mm)
+  package; use DCK or DBV if hand-assembling.
+- `AC0402DR-0710KL` — **wrong value**: 10 kΩ was superseded by R6 = 6.8 kΩ
+  (finding 43). Either source 6.8 kΩ or consciously revert R6 to 10 kΩ
+  (1.58 V idle, still above V_IH, but outside TI's ≤ 7 kΩ guidance).
+- `CC0402JRX5R6BB104` — decodes to 100 nF, X5R, 10 V, 0402; the `J` tolerance
+  and `BB` thickness codes are not listed in the supplied Yageo X5R catalog, so
+  confirm them on the distributor page.
+
+Still to source manually: U1 (VL53L8CX), J1 (1×6 2.54 mm THT), R6 (6.8 kΩ 0402),
+and the whole system BOM (TPS22918-class switch, 100 kΩ ON pull-down, 22 µF at
+VIN, ≥ 47 µF bulk, 3.3 V supply, harness, stencil).
