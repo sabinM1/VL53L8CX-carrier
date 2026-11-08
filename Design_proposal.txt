@@ -21,7 +21,7 @@ Rev 1 sources (DS14161 Rev 11, UM3109, AN5897, AN5939, TN1532, SCES898C) are cit
 | # | Change | Why |
 |---|---|---|
 | 1 | **Variant B deleted** (5 V input, 3.3 V LDO U4, C8 5 V cap, cascade and 3.3 V-LDO thermal text). | Requested. Only the 3.3 V-only design remains. |
-| 2 | **Host changed from Teensy 4.0 to Waveshare RP2350-Zero Mini.** Pin map, boot state, current budget and software all rewritten. | Requested. |
+| 2 | **Host changed from Teensy 4.0 to Waveshare RP2350-Zero Mini (Rev 2 only; reverted to Teensy 4.0 in Rev 3+).** Pin map, boot state, current budget and software were rewritten at the time. | Requested. |
 | 3 | **One board becomes five identical carrier boards** on a shared SPI bus with one NCS GPIO per board. | Requested. |
 | 4 | **OE tied to local NCS_S** instead of GND. Polarity confirmed: OE high = Hi-Z, OE low = enabled, OE referenced to VCCA [V TI SCES898C overview]. | Requested. Gives true Hi-Z on MISO, which a floating-input shifter does not (see change 5). |
 | 5 | **⚠ DESIGN DEFECT FOUND IN THE REQUESTED OE→NCS_S SCHEME, FIXED.** If NCS itself passes through the same AXC4T774 that OE gates, the board can never be selected (deadlock, §2.1). **NCS is now translated by a separate one-bit shifter U5 (SN74AXC1T45), and U3 carries only SCLK, MOSI and MISO.** | Without this the design does not work. |
