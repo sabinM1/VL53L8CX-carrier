@@ -40,16 +40,32 @@ CS-to-first-clock ≥ 1 µs, SPI mode-3 idle levels, one-driver-at-a-time MISO,
 | Tool | Use |
 |---|---|
 | LogicAnalyzer V6.0 + probes | R8, SPI/I²C decode, CS/OE timing |
-| Oscilloscope, 2 ch, ≥ 100 MHz | R2, R6, R7; edge and level measurements |
+| Portable DSO, 200 kHz / 2.5 MS/s (10× probe) | **R2 and R6 only** — see §0.3 |
+| Oscilloscope ≥ 20 MHz, 2 ch | R7 (I²C rise time) — Mode B only |
 | DMM | R9, continuity, harness resistance, 1V8 accuracy |
 | Bench supply 0–5 V, ≥ 2 A, current limit | 3.3 V rail; set 2 A for inrush, ~0.75 A for soak |
 | USB serial terminal | R3, R4, CSV capture |
 | Teensy 4.0 + USB cable | Host |
 | Iron / hot air, 30 AWG wire | Test points on J1 and the 1V8 net |
 
-A 20 MHz USB scope is enough for R2 (58 µs) and R6 (DC); R7 at 300 ns is also
-comfortable on 20 MHz (its own rise time is ~17 ns). So a cheap scope closes the
-gap; a logic analyzer alone does not.
+### 0.3 Portable DSO (200 kHz, 2.5 MS/s) — what it covers
+
+Bandwidth 200 kHz ⇒ displayed rise time ≈ 0.35 / 200 kHz = **1.75 µs**;
+sampling 2.5 MS/s ⇒ 0.4 µs per point. That is enough for the slow power-tree
+checks and nothing fast:
+
+| Check | Portable DSO? | Why |
+|---|---|---|
+| R2 CORE_1V8 0.9→1.6 V ≤ 58.3 µs | **Yes** | The edge is ~25–49 µs; 1.75 µs of smoothing is a few percent and errs long (conservative) |
+| Load-switch t_R ≈ 95 µs, QOD decay τ ≈ 1 ms | **Yes** | Both are ≫ 1.75 µs |
+| R6 MISO_H idle ≈ 0 V | **Yes, with a caveat** | DC measurement. A 10 MΩ probe can pull a *truly floating* node to 0 V and hide the fault. The design biases it through 14.2 kΩ, so a real float is unlikely; if in doubt, lift the probe and confirm with a 1 MΩ pull-up test or a DMM |
+| R7 I²C rise time ≤ 300 ns | **No** | 1.75 µs rise time cannot resolve 300 ns. Needs ≥ 20 MHz (Mode B only) |
+| R8 SPI 3 MHz duty | **No** | 200 kHz cannot see 3 MHz. Use the LogicAnalyzer |
+| R9 AVDD ≥ 3.13 V | **No** | Use the DMM |
+
+So the portable scope plus the V6.0 logic analyzer covers R2, R3, R4, R6 and R8.
+R7 only matters if you build Mode B; if you do, borrow a ≥ 20 MHz scope for that
+one measurement.
 
 ---
 
@@ -162,7 +178,7 @@ Record every measurement; a step is not closed until the number is written down.
 - [ ] Per-board 1V8 = 1.755–1.845 V (absolute floor 1.62 V).
 - [ ] Supply current 400–550 mA sustained (spec 465 mA).
 
-### B2 — Power edges (oscilloscope; this is R2)
+### B2 — Power edges (portable DSO; this is R2)
 - [ ] Trigger on ON rising; far board first, then all five.
 - [ ] AVDD 0→3.13 V ≤ 3.3 ms (expect ~95 µs).
 - [ ] **CORE_1V8 0.9→1.6 V ≤ 58.3 µs on every board.**
@@ -172,7 +188,7 @@ Record every measurement; a step is not closed until the number is written down.
 If the CORE window fails: do not fit CT (it only slows the rail). The fallback
 is a different LDO or accepting the input-tracking case after measuring it.
 
-### B3 — MISO idle (scope or DMM; this is R6)
+### B3 — MISO idle (portable DSO or DMM; this is R6)
 - [ ] All five CS high. Expect ≈ 0 V (five 71 kΩ internal pull-downs).
 - [ ] If it floats or sits mid-rail, fit the staged **47 kΩ pull-down at the
       host** (never a pull-up).
