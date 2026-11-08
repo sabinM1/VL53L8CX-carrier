@@ -189,19 +189,38 @@ pull-down) and do not move R7 to the host.
 
 ### 3.7 System power sheet (one per system)
 
-1. 3.3 V input → ≥ 47 µF bulk → U10 VIN (with C10 22 µF) → U10 VOUT
-   (with C11 1 µF) → `3V3_EXT` to all five carriers.
-2. U10 = **TPS22918TDBVRQ1**, SOT-23-6 (DBV), ≥ 1.5 A. Pins: 1 VIN, 2 GND,
-   3 ON, 4 CT, 5 QOD, 6 VOUT. **CT open** (t_R ≈ 95 µs at 3.3 V).
-3. **QOD (pin 5) tied to VOUT.** That enables the internal 25 Ω discharge; left
-   open, the rail decays only through its own load and you lose the power cycle.
-4. R10 = 100 kΩ from ON to GND. The rail must be **off** whenever the host is
-   off, resetting, or before firmware runs; the ON pin must never float.
-5. ON ← Teensy pin 2 (`RAIL_EN_PIN`).
-6. Star ground: one point at the supply; five separate ground wires to the
+Net names: `3V3_IN` is the supply side, before the switch. `3V3_EXT` is the
+switched side that leaves on J1-1.
+
+1. `3.3 V supply` → ≥ 47 µF bulk → `3V3_IN` (C10 22 µF to GND) → U10 →
+   `3V3_EXT` (C11 1 µF to GND) → J1-1 of all five carriers.
+2. U10 = **TPS22918TDBVRQ1**, SOT-23-6 (DBV), 2 A. Wire every pin:
+
+| Pin | Name | Net | Connection |
+|---|---|---|---|
+| 1 | VIN | `3V3_IN` | After the bulk capacitor and C10 |
+| 2 | GND | `GND` | Star point |
+| 3 | ON | `RAIL_EN` | Teensy pin 2, **plus R10 100 kΩ to GND placed at the switch** |
+| 4 | CT | — | **No connection, no footprint** |
+| 5 | QOD | `3V3_EXT` | **Strap directly to pin 6**, no external resistor |
+| 6 | VOUT | `3V3_EXT` | C11 1 µF to GND, then to the carriers |
+
+3. **CT stays open permanently.** 275 µs is an upper bound on the rail edge and
+   CT only slows it further; if the CORE_1V8 window fails, CT cannot fix it.
+   Do not fit a capacitor, do not lay out the pad.
+4. **QOD is strapped, not optional.** Direct tie enables the internal 25 Ω at
+   3.3 V: 36.5 µF discharges with τ ≈ 0.9 ms, peak 132 mA. With the pin open,
+   QOD is disabled and the power-cycle recovery silently stops working.
+5. **R10 is mandatory.** ON has no internal pull-down and must not float; ON
+   leakage ≤ 0.1 µA gives 10 mV across 100 kΩ, far below V_IL = 0.5 V. The rail
+   must therefore be **off** whenever the host is off, resetting, or before
+   firmware runs.
+6. U10 is also the only sensor reset: it kills AVDD and CORE_1V8 together, which
+   DS14161 requires. A per-board EN pull-down does not (AVDD stays up).
+7. Star ground: one point at the supply; five separate ground wires to the
    carriers; Teensy GND joins only at that point. Never join the Teensy 3.3 V
    pin to `3V3_EXT`.
-7. The bulk capacitor stays **upstream** of U10. Downstream bulk raises inrush
+8. The bulk capacitor stays **upstream** of U10. Downstream bulk raises inrush
    from ≈1.27 A toward ≈2.9 A.
 
 ---

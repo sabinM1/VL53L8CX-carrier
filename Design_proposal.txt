@@ -951,12 +951,12 @@ selected — see §13.15.
 - **R_ON** at 3.3 V: 53 mΩ typ, **59 mΩ max at 25 °C**, **107 mΩ max over
   −40…+105 °C**. Drop at 750 mA: ≤ 44 mV typ, **≤ 80 mV worst case**.
   The earlier "≤ 78 mΩ ⇒ 59 mV" figure was optimistic; use 107 mΩ.
-- **t_R (CT open) = 95 µs at 3.3 V**, t_ON 1430 µs, t_F 2 µs — matches the
-  275 µs CORE_1V8-tracking budget. The table is valid when VIN is already
-  steady before ON is asserted, which is exactly this design (bulk is upstream,
-  ON comes from a GPIO).
-- **t_D at CT = 0 is not tabulated** (only at CT = 1000 pF: 590 µs). The
-  firmware's 5 ms rail-settle wait covers any plausible value.
+- **t_R (CT open) = 95 µs at 3.3 V.** Note the switching tables' t_ON 1430 µs /
+  t_R 1680 µs / t_D 590 µs are the **CT = 1000 pF** condition, not ours; the
+  CT = 0 column of the rise-time table is the relevant one, and t_D at CT = 0
+  is not tabulated. The firmware's 5 ms rail-settle wait covers any plausible
+  value. The table is valid when VIN is already steady before ON is asserted,
+  which is exactly this design (bulk upstream, ON from a GPIO).
 - **QOD is a pin, not a feature that is always on.** Options: tie QOD to VOUT
   (internal R_PD), add R_EXT, or leave open (disabled). **This design must tie
   pin 5 to VOUT** — otherwise the "rail cycle recovers a hung sensor" claim is
@@ -969,3 +969,28 @@ selected — see §13.15.
 **Consequence:** R1 is closed on paper; the bench still scopes t_R under the real
 36.5 µF load (datasheet t_R assumes C_L = 0.1 µF). QOD-to-VOUT is a new layout
 requirement and is now in the guide's system-power step and do-not list.
+
+#### Final load-switch configuration (decided, Rev 7)
+
+| Pin | Net | Connection |
+|---|---|---|
+| 1 VIN | `3V3_IN` | Supply side: bulk ≥ 47 µF and C10 22 µF to GND |
+| 2 GND | `GND` | Star point at the supply |
+| 3 ON | `RAIL_EN` | Teensy pin 2; **R10 100 kΩ to GND** at the switch |
+| 4 CT | — | **No connection, no footprint.** Left open permanently |
+| 5 QOD | `3V3_EXT` | **Strapped directly to pin 6** (no R_EXT) |
+| 6 VOUT | `3V3_EXT` | C11 1 µF to GND; then to J1-1 of all five carriers |
+
+Reasoning, so it is not reopened later:
+
+- **CT is not a tuning knob here.** 275 µs is an *upper* bound on the rail edge,
+  and CT only makes the edge slower. If the measured CORE_1V8 window (≤ 58.3 µs)
+  fails, no CT value fixes it — that is an LDO turn-on problem, and the fix is a
+  different LDO or accepting the tracking case. Fit nothing on pin 4.
+- **QOD direct-tie, no R_EXT.** 25 Ω typ at 3.3 V discharges 36.5 µF with
+  τ ≈ 0.9 ms and a 132 mA peak, well inside the pin's design intent. Leaving the
+  pin open disables discharge entirely, and a hung sensor may draw too little to
+  collapse the rail on its own — the rail cycle would silently stop working.
+- **100 kΩ on ON is mandatory.** ON has no internal pull-down and the datasheet
+  says it must not float; 0.1 µA leakage × 100 kΩ = 10 mV, far below V_IL 0.5 V.
+  Place R10 at the switch, not at the Teensy.

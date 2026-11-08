@@ -135,7 +135,8 @@ carrier and system rows, DNP options flagged with Qty 0).
   Pins: 1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT. ON is high-threshold-safe
   (V_IH ≥ 1 V) but **must not float** — hence the 100 kΩ pull-down. R_ON at
   3.3 V is 53 mΩ typ / 59 mΩ max at 25 °C / **107 mΩ max over −40…+105 °C**,
-  so the drop at 750 mA is 44 mV typical and 80 mV worst case. **Tie QOD to
+  so the drop at 750 mA is 40 mV typical, 44 mV max at 25 °C and 80 mV
+  worst case over temperature. **Tie QOD to
   VOUT** to enable the internal 25 Ω discharge — left open, the rail decays only
   through its own load and the "power cycle" is lost. CT open gives the 95 µs
   rise, valid because VIN (the bulk) is already steady when ON goes high.
