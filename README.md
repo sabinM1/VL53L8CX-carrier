@@ -355,6 +355,7 @@ CS-settle macro, chunk size and trim macros, plus a `static_assert` on the
 
 ```
 README.md                     this file
+NEXT_STEPS.md                 schematic/PCB/build/bring-up execution checklist
 Design_proposal.txt           full design record: architecture, BOM, netlist,
                               confidence tags, per-round review tables
 pcb design/
@@ -480,6 +481,8 @@ either passes or has a staged fallback already designed in.
 
 - `Design_proposal.txt` — the authoritative design record, including netlists,
   confidence tags and every per-round finding.
+- `NEXT_STEPS.md` — the execution checklist from schematic capture to the
+  1-hour soak, including which measurements the logic analyzer can and cannot do.
 - `pcb design/Schematic_and_PCB_Guide.md` — how to draw the schematic and lay
   out the board.
 - `code/teensy4/README.md` — firmware, pin maps, library patch details.
