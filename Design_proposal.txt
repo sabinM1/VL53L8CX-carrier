@@ -385,7 +385,7 @@ Notes on the sketch
 | U1 | VL53L8CXV0GC/1 (liner version) | LGA16 6.4×3.0×1.75 | Sensor | 1 |
 | U2 | MIC5504-1.8YMT | 4-pin DFN 1.0×1.0 | 1.8 V → CORE_1V8 + IOVDD + VCCA of U3, U5 | 1 |
 | U3 | SN74AXC4T774RSVR | UQFN-16 2.6×1.8 | SCLK / MOSI / MISO translator, **OE = NCS_S** | 1 |
-| **U5 (new)** | SN74AXC1T45 (DCK SC70-6 or DBV SOT-23-6; suffix to confirm) | SC70-6 / SOT-23-6 | **NCS translator** (host → sensor) | 1 |
+| **U5 (new)** | SN74AXC1T45DTQR (X2SON-6) | X2SON-6 | **NCS translator** (host → sensor) | 1 |
 | C1 | 4.7 µF X5R 10 V | 0402 | AVDD at C4 (check DC-bias derating, else 0603) | 1 |
 | C2 | 100 nF | 0402 | CORE_1V8 at B7 | 1 |
 | C3 | 100 nF | 0402 | IOVDD at A3 | 1 |
@@ -440,7 +440,10 @@ Optional, not counted: R8 47 kΩ MOSI_S → 1V8 (if the sensor's MOSI input is s
 | C4 | AVDD | 3V3, C1 |
 | C5 | MISO | U3 A4 (MISO_S) |
 
-(Pin numbers [V Rev 1, DS14161 Table 3].)
+(Pin numbers [V DS14161 Table 3, Rev 12]. The table also states that A6/A7/C6 are
+RSVD1–3 and must be **connected to ground** — the design is correct. C1
+`SPI_I2C_N` is the pin that doubles as the I²C interface reset in I²C mode; there
+is no separate `I2C_RST` pad.)
 
 ---
 
@@ -671,8 +674,10 @@ One sensor per bus:
 8. **I2C pull-ups:** external, sensor side to 1.8 V and host side to 3.3 V; the
    TCA9406 has 10 kΩ internal pull-ups on all four pins that cannot be disabled,
    so fit 2.2 kΩ both rails (effective 1.8 kΩ) and drop to 1.5 kΩ above ~150 pF.
-9. **I2C_RST must be allowed low** for I2C — the library drives it low at
+9. **`SPI_I2C_N` (C1) must be allowed low** for I2C — the datasheet names this
+   same pin as the I²C interface reset, and the library drives it low at
    `begin()`. The current board pulls it high (SPI). Tie low or route to a GPIO.
+   There is no separate `I2C_RST` pin.
 10. **SPI_I2C_N** low = I2C. A fixed pull-down removes the bus-reset capability
     UM3109 describes; a GPIO is better.
 11. **Wire buffer:** Teensy `BUFFER_LENGTH` is 136 (tx 137), so the library's
@@ -703,7 +708,7 @@ to Teensy 4.0).
 | 20 | SPI1 26/27 are bottom pads, not headers | **Fixed** — Mode A/bring-up moved to `SPI` header pins |
 | 21 | Mode A/B lost retry/demotion/stale handling | **Fixed** — restored |
 | 22 | Mode A printed -1 every poll | **Fixed** — print only on update |
-| 23 | I2C_RST not handled for I2C | **Documented** — §13.4 item 9 |
+| 23 | `SPI_I2C_N` not handled for I2C | **Documented** — §13.4 item 9 |
 | 24 | Wire buffer overflow (2+136 > 137) | **Fixed** — `DEFAULT_I2C_BUFFER_LEN 128` |
 | 25 | PCA9306 at 1 MHz unproven | **Open** — scope |
 
@@ -718,7 +723,7 @@ to Teensy 4.0).
 | 31 | Retry blocks healthy sensors | **Documented** — README cost table; 30 s period, one sensor per pass |
 | 32 | LED load on SCK pin 13 | **Accepted** — Teensy 4.0 core has `CNT_SCK_PINS = 1`; `setSCK()` cannot remap [V core 1.62.0] |
 | 33 | MISO bias must not use `pinMode(12, INPUT_PULLUP)` after `SPI.begin()` | **Documented** — external 10–47 kOhm only |
-| 34 | `I2C_RST` left at -1 keeps the SPI pull-up | **Documented** — I2C variant must tie it low or route a GPIO |
+| 34 | `SPI_I2C_N` (C1) left at -1 keeps the SPI pull-up | **Documented** — I2C variant must tie it low or route a GPIO; C1 is also the I²C-mode reset |
 | 4 | 1.8 V slew with EN=IN | **Open** — bench |
 | 5 | R7 back-feed | **Open** — bench |
 | 26 | MISO floats when all U3 Hi-Z | **Open** — 10–47 kΩ host-side pull |
@@ -782,7 +787,7 @@ blocker was found.
 #### Mode B verdict (round 7)
 
 A trimmed frame read is 0.97 ms on SPI at 3 MHz, so a worst-case Mode A pass with
-all five ready is **4.35 ms = 6.5 %** of a 66.7 ms frame; 8×8 tops out at 15 Hz.
+all five ready is **4.9 ms = 7.3 %** of a 66.7 ms frame; 8×8 tops out at 15 Hz.
 Mode A's sequential polling was never the bottleneck, and the trim removed Mode
 B's only real advantage. **Do not fabricate the I2C carrier variant.** Mode B's
 costs: TCA9406 + pull-up engineering per I2C carrier, two strap changes, bottom-pad
@@ -922,7 +927,8 @@ Component list re-check (the list supplied was from the pre-Rev-4 design):
   `C1005X5R1A475K050BC` (C1), `MCASL105SB5105KFNA01` (C7, 1 µF X5R 10 V),
   `RC0402DR-0747KL` (R1–R5), `RE0402DRE074K7L` (R7).
 - `SN74AXC1T45DTQR` — electrically correct, but DTQ is the X2SON-6 (1.0 × 0.8 mm)
-  package; use DCK or DBV if hand-assembling.
+  package; use DCK or DBV only as same-die alternatives if hand-assembling. The
+  sourced MPN is `SN74AXC1T45DTQR` (X2SON-6).
 - `AC0402DR-0710KL` — **wrong value**: 10 kΩ was superseded by R6 = 6.8 kΩ
   (finding 43). Either source 6.8 kΩ or consciously revert R6 to 10 kΩ
   (1.58 V idle, still above V_IH, but outside TI's ≤ 7 kΩ guidance).
@@ -941,7 +947,7 @@ selected — see §13.15.
 | U1 | `VL53L8CXV0GC/1` | Liner version (no reflow-tape liner handling); MSL 3 rules still apply |
 | J1 | `PH1-06-UA` (Adam Tech) | 1×6, 2.54 mm THT. Confirm straight vs right-angle and the plating behind the `UA` suffix on the Adam Tech drawing |
 | R6 | `AC0402FR-076K8L` (Yageo AC) | 6.8 kΩ ±1 %. Replaces the superseded 10 kΩ `AC0402DR-0710KL`. Idle 1.64 V vs V_IH 1.26 V |
-| U10 | `TPS22918TDBVRQ1` | AEC-Q100, SOT-23-6 (DBV), 2 A, 52 mΩ typ |
+| U10 | `TPS22918TDBVRQ1` | AEC-Q100, SOT-23-6 (DBV), 2 A, 53 mΩ typ |
 
 **TPS22918-Q1 facts now verified** (`reference docs/components/tps22918-q1.md`):
 
@@ -1012,4 +1018,29 @@ assembly drawing must carry the liner-removal step.
 
 **Remaining open items are bench-only:** R2 (CORE_1V8 window), R3 (sensor's real
 320 B block set), R4 (re-init of a streaming sensor), R6 (MISO_H idle), R7 (I²C
-rise time), R8 (LPSPI duty), R9 (far-end AVDD), R10 (Rev-7 compile record).
+rise time), R8 (LPSPI duty), R9 (far-end AVDD), R10 (compile record).
+
+### 13.17 Pre-layout audit of Rev 7 — findings addressed (Rev 8)
+
+An independent audit of the 15-file bundle returned 0 FAIL, 2 MAJOR (both
+datasheet questions), 8 MINOR and 2 NIT. No BLOCKER. All items are closed in the
+sources; the MAJOR pair was settled from DS14161 Table 3.
+
+| ID | Audit item | Resolution |
+|---|---|---|
+| F1 | U1 A6/A7/C6 `RSVD1–3` tied to GND; no tracker entry | **Closed from DS14161 Table 3 (Rev 12): "connect to ground".** The GND tie is correct; no DNC pads exist in this design. Recorded in README §9 and the PCB guide §2.3 |
+| F2 | `I2C_RST` claimed pulled up but absent from the pin table and BOM | **Closed.** There is no separate `I2C_RST` pin. C1 `SPI_I2C_N` doubles as the I²C interface reset and is pulled up by R5 in SPI mode. All doc references corrected (§7.2, §13.4 item 9, §13.7 item 34, firmware README) |
+| F3 | `init()` worst case ~12–15 s because post-boot polls were not guarded | **Fixed** — early `goto exit` after the NVM, xtalk, default-config and DCI polls. Bound is now ~4.8 s SPI / ~6.8 s I²C@400k per attempt |
+| F4 | CSV completely silent when no sensor produces a frame | **Fixed** — both array sketches print at the frame cadence even with no fresh frame, so an all `-1` line appears and a dead array differs from a hung host |
+| F5 | README said one configure attempt at boot; code made three | **Fixed in code** — `bring_up_all()` now makes one attempt per sensor; the 30 s retry is the retry path |
+| F6 | R4 (re-init of a streaming sensor) had no test code | **Fixed** — `single_sensor_bringup` accepts `r` and re-runs init/configure/start while streaming (no `stop_ranging()`) |
+| F7 | Bring-up sketch probed `is_alive()` once, ~10–20 ms after rail-on | **Fixed** — same 3 × 50 ms probe as the array sketches |
+| F8 | Supply budget: ±3 % location unspecified | **Documented** — ±3 % is at the far carrier J1-1; switch + harness can drop ~0.19 V at 750 mA, so set the source ~3.4 V or verify ≥ 3.13 V at the far board |
+| F9 | U5 package stated three ways | **Fixed** — single MPN `SN74AXC1T45DTQR` (X2SON-6) in BOM, README and guide; DCK/DBV are same-die alternatives only |
+| F10 | 0.97 ms per SPI read inconsistent with 4.35 ms per pass | **Fixed** — 4.9 ms per five-sensor pass (7.3 % of 66.7 ms) |
+| F11 | Stale doc/BOM lines | **Fixed** — U3 "pin numbers to confirm" removed; 52 → 53 mΩ; R6 pull-up/pull-down wording corrected; MISO pull-up number corrected to ~2.2 V; R8 moved to System; all six trim macros guarded in all three sketches |
+| F12 | Inrush tally omitted the 1.8 V-side capacitance | **Fixed** — ≈1.5 A including the LDO-side charge, still inside the 2 A switch |
+
+R10 is now closed with Rev-8 measurements (Arduino CLI 1.5.1 / teensy:avr 1.62.0):
+Mode A 46 736 flash / 108 576 RAM1; Mode B 47 904 / 110 624; bring-up
+46 032 / 99 040.

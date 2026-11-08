@@ -30,8 +30,9 @@
 // Output trimming (round 6): ambient / spads / signal / sigma / reflectance /
 // motion blocks are disabled in the custom config, cutting a frame from ~1444
 // to ~320 bytes.
-#if !defined(VL53L8CX_DISABLE_AMBIENT_PER_SPAD) || !defined(VL53L8CX_DISABLE_SIGNAL_PER_SPAD) \
- || !defined(VL53L8CX_DISABLE_MOTION_INDICATOR)
+#if !defined(VL53L8CX_DISABLE_AMBIENT_PER_SPAD) || !defined(VL53L8CX_DISABLE_NB_SPADS_ENABLED) \
+ || !defined(VL53L8CX_DISABLE_SIGNAL_PER_SPAD) || !defined(VL53L8CX_DISABLE_RANGE_SIGMA_MM) \
+ || !defined(VL53L8CX_DISABLE_REFLECTANCE_PERCENT) || !defined(VL53L8CX_DISABLE_MOTION_INDICATOR)
 #error "Output trimming missing: the patched platform_config_custom.h is not being used"
 #endif
 static_assert(sizeof(VL53L8CX_ResultsData) <= 512,
@@ -80,6 +81,28 @@ static void print_grid(const VL53L8CX_ResultsData *r) {
   }
 }
 
+static bool init_and_start() {
+  uint8_t st = sensor.init();
+  Serial.printf("# init: status=%u\n", st);
+  if (st != VL53L8CX_STATUS_OK) {
+    Serial.println("# INIT FAILED");
+    return false;
+  }
+
+  st = sensor.set_resolution(VL53L8CX_RESOLUTION_8X8);
+  if (st != VL53L8CX_STATUS_OK) { Serial.println("# set_resolution FAILED"); return false; }
+
+  st = sensor.set_ranging_frequency_hz(RANGING_HZ);
+  if (st != VL53L8CX_STATUS_OK) { Serial.println("# set_frequency FAILED"); return false; }
+
+  st = sensor.set_ranging_mode(VL53L8CX_RANGING_MODE_CONTINUOUS);
+  if (st != VL53L8CX_STATUS_OK) { Serial.println("# set_mode FAILED"); return false; }
+
+  st = sensor.start_ranging();
+  Serial.printf("# start_ranging: status=%u\n", st);
+  return st == VL53L8CX_STATUS_OK;
+}
+
 void setup() {
   // Raise the external rail first: the load switch ON pin has a 100k pull-down,
   // so the rail is off at reset, and driving CS high while it is off feeds
@@ -104,32 +127,22 @@ void setup() {
   sensor.begin();
 
   uint8_t alive = 0;
-  uint8_t st = sensor.is_alive(&alive);
+  uint8_t st = VL53L8CX_STATUS_OK;
+  bool alive_ok = false;
+  // Same 3 x 50 ms probe as the array sketches: the rail needs only ~0.5 ms,
+  // but a sensor booting out of reset must not be declared dead on one try.
+  for (uint8_t a = 0; a < 3 && !alive_ok; a++) {
+    st = sensor.is_alive(&alive);
+    if (st == VL53L8CX_STATUS_OK && alive) alive_ok = true;
+    else delay(50);
+  }
   Serial.printf("# is_alive: status=%u alive=%u\n", st, alive);
-  if (st != VL53L8CX_STATUS_OK || alive == 0) {
+  if (!alive_ok) {
     Serial.println("# PROBE FAILED: check wiring, 3V3 rail, SPI mode, CS pin.");
     return;
   }
 
-  st = sensor.init();
-  Serial.printf("# init: status=%u\n", st);
-  if (st != VL53L8CX_STATUS_OK) {
-    Serial.println("# INIT FAILED");
-    return;
-  }
-
-  st = sensor.set_resolution(VL53L8CX_RESOLUTION_8X8);
-  if (st != VL53L8CX_STATUS_OK) { Serial.println("# set_resolution FAILED"); return; }
-
-  st = sensor.set_ranging_frequency_hz(RANGING_HZ);
-  if (st != VL53L8CX_STATUS_OK) { Serial.println("# set_frequency FAILED"); return; }
-
-  st = sensor.set_ranging_mode(VL53L8CX_RANGING_MODE_CONTINUOUS);
-  if (st != VL53L8CX_STATUS_OK) { Serial.println("# set_mode FAILED"); return; }
-
-  st = sensor.start_ranging();
-  Serial.printf("# start_ranging: status=%u\n", st);
-  ranging_ok = (st == VL53L8CX_STATUS_OK);
+  ranging_ok = init_and_start();
 }
 
 void loop() {
@@ -156,8 +169,17 @@ void loop() {
     }
   }
 
-  if (Serial.available() && Serial.read() == 'g') {
-    print_grid(&results);
+  if (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == 'g') {
+      print_grid(&results);
+    } else if (c == 'r') {
+      // R4 drill: re-init the sensor while it is still streaming. No
+      // stop_ranging() first - that polls the MCU-stop bit for ~5 s and is
+      // never used by the production sketches either.
+      Serial.println("# forced re-init while streaming");
+      ranging_ok = init_and_start();
+    }
   }
 
   delay(2);

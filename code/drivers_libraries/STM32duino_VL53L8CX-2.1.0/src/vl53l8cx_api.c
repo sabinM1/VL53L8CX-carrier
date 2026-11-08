@@ -364,11 +364,17 @@ uint8_t vl53l8cx_init(
   (void)memcpy(p_dev->offset_data, p_dev->temp_buffer,
                VL53L8CX_OFFSET_BUFFER_SIZE);
   status |= _vl53l8cx_send_offset_data(p_dev, VL53L8CX_RESOLUTION_4X4);
+  if (status != (uint8_t)0) {
+    goto exit;   /* each remaining poll can burn its full 2 s timeout */
+  }
 
   /* Set default Xtalk shape. Send Xtalk to sensor */
   (void)memcpy(p_dev->xtalk_data, (uint8_t *)VL53L8CX_DEFAULT_XTALK,
                VL53L8CX_XTALK_BUFFER_SIZE);
   status |= _vl53l8cx_send_xtalk_data(p_dev, VL53L8CX_RESOLUTION_4X4);
+  if (status != (uint8_t)0) {
+    goto exit;
+  }
 
   /* Send default configuration to VL53L8CX firmware */
   status |= VL53L8CX_WrMulti(&(p_dev->platform), 0x2c34,
@@ -376,6 +382,9 @@ uint8_t vl53l8cx_init(
                              sizeof(VL53L8CX_DEFAULT_CONFIGURATION));
   status |= _vl53l8cx_poll_for_answer(p_dev, 4, 1,
                                       VL53L8CX_UI_CMD_STATUS, 0xff, 0x03);
+  if (status != (uint8_t)0) {
+    goto exit;
+  }
 
   status |= vl53l8cx_dci_write_data(p_dev, (uint8_t *)&pipe_ctrl,
                                     VL53L8CX_DCI_PIPE_CONTROL, (uint16_t)sizeof(pipe_ctrl));
@@ -390,7 +399,7 @@ uint8_t vl53l8cx_init(
                                     VL53L8CX_DCI_SINGLE_RANGE,
                                     (uint16_t)sizeof(single_range));
 
-exit:
+ exit:
   return status;
 }
 

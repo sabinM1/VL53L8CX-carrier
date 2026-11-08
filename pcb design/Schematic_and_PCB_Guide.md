@@ -1,6 +1,6 @@
 # Schematic and PCB design guide — VL53L8CX carrier
 
-How to turn the frozen design in `../Design_proposal.txt` (Rev 7) into a
+How to turn the frozen design in `../Design_proposal.txt` (Rev 8) into a
 schematic and a fabricated board. Read `../README.md` first for the system
 overview.
 
@@ -11,9 +11,9 @@ is high speed: 3 MHz SPI, 400 kHz I²C, 150 mA per LDO.
 **Document precedence.** Where this guide and a primary document disagree, the
 primary document wins:
 
-1. `DS_vl53l8cx.pdf` — sensor electrical, pin, land-pattern and reflow data.
-2. `an5897-pcb-thermal-guidelines-*.pdf` — thermal pad, via and paste pattern.
-3. `pcb-manufacturing-guidelines-vl53l8.pdf` — assembly, MSL3, rework.
+1. `DS14161_VL53L8CX_Datasheet.pdf` — sensor electrical, pin, land-pattern and reflow data.
+2. `AN5897_VL53L8_Thermal_Guidelines.pdf` — thermal pad, via and paste pattern.
+3. `VL53L8_PCB_Manufacturing_Guidelines.pdf` — assembly, MSL3, rework.
 4. `../Design_proposal.txt` — this project's frozen decisions.
 5. This guide — procedure and checklists.
 
@@ -97,7 +97,7 @@ whole scheme; keep it.
 | U1.B1 (GPIO2/SYNC) | R3 47 kΩ to `1V8`; no host connection |
 | U1.A2 (LPn) | R4 47 kΩ to `1V8` (device always enabled) |
 | U1.C1 (SPI_I2C_N) | R5 47 kΩ to `1V8` (selects SPI) |
-| U1.A6, U1.A7, U1.C6 (RSVD1–3) | Wired to `GND` in this design — **see the verification note below** |
+| U1.A6, U1.A7, U1.C6 (RSVD1–3) | `GND` — **confirmed** against DS14161 Table 3, which says "connect to ground" |
 | U3.3 (A3) | No connect (idle channel) |
 | U3.10 (B3) | `GND` (drives the idle A3 low) |
 | U3.15, U3.16 (DIR1, DIR2) | `GND` (B→A) |
@@ -105,12 +105,12 @@ whole scheme; keep it.
 | U3.6 (DIR4) | `1V8` (A→B: sensor MISO to host) |
 | U5.5 (DIR) | `GND` ⇒ B→A, i.e. NCS_H (3.3 V) drives NCS_S (1.8 V) |
 
-> **Verify before netlisting:** the PCB manufacturing guideline says "DNC pins
-> must be left unconnected", while DS14161 Table 3 is understood to require
-> RSVD pins tied to GND. Open DS14161 Table 3 and confirm A6/A7/C6. If they are
-> marked *reserved, do not connect*, delete the GND connection; if they are
-> marked *connect to GND*, keep it. Do the same for any pad the datasheet calls
-> DNC. This is the only pin-level ambiguity in the design.
+> **Pin-table check (closed).** DS14161 Table 3 gives `RSVD1` (A6), `RSVD2`
+> (A7) and `RSVD3` (C6) as "connect to ground". The GND tie in this design is
+> correct; the manufacturing guideline's "DNC must be left unconnected" applies
+> to pads the datasheet actually marks DNC, and there are none of those here.
+> Table 3 also confirms C1 `SPI_I2C_N` is the pin that doubles as the I²C
+> interface reset — there is no separate `I2C_RST` pad.
 
 ---
 
@@ -160,8 +160,9 @@ whole scheme; keep it.
    "A→B" was wrong.
 3. C8 (100 nF) at VCCA, C9 (100 nF) at VCCB.
 4. Pin numbers and direction are **confirmed** from the TI datasheet (residual R5
-   is closed). If you hand-assemble, prefer DCK (SC70-6) or DBV (SOT-23-6); the
-   X2SON-6 DTQ part is 1.0 × 0.8 mm.
+   is closed). The sourced part is **SN74AXC1T45DTQR** (X2SON-6, 1.0 × 0.8 mm).
+   DCK (SC70-6) and DBV (SOT-23-6) are the same die in easier packages if you
+   rework by hand, but the BOM and the footprint use DTQR.
 
 ### 3.5 Passives
 
@@ -223,8 +224,11 @@ switched side that leaves on J1-1.
 7. Star ground: one point at the supply; five separate ground wires to the
    carriers; Teensy GND joins only at that point. Never join the Teensy 3.3 V
    pin to `3V3_EXT`.
-8. The bulk capacitor stays **upstream** of U10. Downstream bulk raises inrush
-   from ≈1.27 A toward ≈2.9 A.
+8. The supply is specified as **3.3 V ±3 % at the far carrier's J1-1**, after
+   the switch drop and the harness. With ~0.19 V of worst-case loss, set a bench
+   supply to ~3.4 V (or verify ≥ 3.13 V at the far board under 750 mA).
+9. The bulk capacitor stays **upstream** of U10. Downstream bulk raises inrush
+   from ≈1.5 A toward ≈3 A.
 
 ---
 
@@ -442,8 +446,8 @@ rework. Do not exceed 260 °C on the cap under any circumstance.
 6. Then follow `../README.md` §8 (bring-up checklist) for the full sequence.
 
 Only build the I²C carrier variant if you deliberately choose Mode B; it needs
-a TCA9406, different strap resistors (SPI_I2C_N low, I2C_RST low or GPIO) and
-I²C pull-ups on both rails. The production build is Mode A.
+a TCA9406, different strap resistors (`SPI_I2C_N` low — that pin is also the
+I²C-mode reset) and I²C pull-ups on both rails. The production build is Mode A.
 
 ---
 

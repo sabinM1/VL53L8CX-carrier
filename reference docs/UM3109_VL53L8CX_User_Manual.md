@@ -1,32 +1,23 @@
-# um3108-how-to-use-stmicroelectronics-xcubetof1-timeofflight-sensor-software-packages-for-stm32cubemx-stmicroelectronics.pdf
+# UM3109 — VL53L8CX user manual
 
-**1. Introduction**
-The X-CUBE-TOF1 expansion software package for STM32Cube includes drivers that recognize Time-of-Flight (ToF) sensors and perform ranging. Supported sensors include VL53L4CX, VL53L4CD, VL53L7CX, and VL53L8CX. Supported boards include X-NUCLEO expansion boards and SATEL breakout boards.
+**1. Introduction & Functional Description**
+The VL53L8CX is a low-power, high-performance ToF multizone sensor utilizing a metasurface lens for a 45x45 degree FoV.
+*[Image: Figure 1. VL53L8CX sensor module - Photograph of the black rectangular optical module showing the Tx and Rx windows and underside LGA pads.]*
+*[Image: Figure 2. VL53L8CX system overview - Diagram of Host (running Ultra Lite Driver) communicating via I2C/SPI to the Module (running Firmware).]*
+*[Image: Figure 3. VL53L8CX effective orientation - Diagram showing a red target 'F' being inverted optically onto a 4x4 SPAD array where zone 0 is bottom-left.]*
+*[Image: Figure 4. Multiple sensors on I2C bus - Schematic showing host connected to two ToF sensors sharing SDA/SCL but with individual LPn control pins.]*
+*[Image: Figure 5. Multiple sensors on SPI - Schematic showing host SPI bus with separate NCS (chip select) lines for each ToF sensor.]*
 
-**2. X-CUBE-TOF1 Software Expansion**
-Provides a complete software framework, STM32CubeMX compatibility, and easy portability.
-*[Image: Figure 1. X-CUBE-TOF1 software architecture - A block diagram showing Application (Ranging measurement example), Hardware Abstraction (STM32Cube HAL), and Hardware (STM32 Nucleo expansion and development boards).]*
-*[Image: Figure 2. X-CUBE-TOF1 package folder structure - File tree showing Documentation, Drivers, Projects, and STM32CubeMX folders.]*
+**2. Package Content and Data Flow**
+*[Image: Figure 6. Driver architecture - Folder structure showing mandatory API files and optional plugins (xtalk, motion, detection).]*
+*[Image: Figure 7. Crosstalk calibration flow - Flowchart: Start Xtalk calibration -> Get Xtalk data -> Set Xtalk data.]*
+*[Image: Figure 8. Ranging flow - Flowchart: Initialize -> Optional Xtalk/Functions -> Start ranging -> Wait for data -> Get measurements -> Stop ranging.]*
 
-**3. System Setup Guidelines**
-Hardware components require an STM32 Nucleo board, an X-NUCLEO or SATEL board, and a USB cable.
-*[Image: Figure 3. STM32 Nucleo board - Photograph of a white STM32 Nucleo development board.]*
-*[Image: Figure 4. Example of an X-NUCLEO-53L7A1 expansion board with a cover glass - Blue expansion board with multiple cover glass spacer options.]*
-*[Image: Figure 5. Example of a SATEL-VL53L7CX breakout board - Small blue PCB with a ToF sensor, mounting holes, and pinout.]*
-*[Image: Figure 6. Sensor expansion board plugged to STM32 Nucleo board - The blue X-NUCLEO board physically mounted on top of the white Nucleo board.]*
-*[Image: Figure 7. Connection between an STM32 Nucleo board and a SATEL - Wiring diagram showing jumper wires connecting the SATEL breakout board pins to the Nucleo headers.]*
-
-**4. Sample Application Examples**
-Examples include SimpleRanging and ThresholdDetection, accessible via precompiled binaries or STM32CubeMX generation.
-*[Image: Figure 8. SimpleRanging folder architecture - File tree showing Binary, EWARM, MDK-ARM, and STM32CubeIDE folders.]*
-*[Image: Figure 9. NUCLEO-F401RE folder architecture - File explorer view highlighting the Binary folder for the 53L7A1.]*
-*[Image: Figure 10. NODE drive - Windows explorer showing NODE_F401RE mass storage drive.]*
-*[Image: Figure 11. Tera Term serial port setup - Dialog box configuring COM port to 460800 baud.]*
-*[Image: Figure 12. Tera Term terminal setup - Dialog box showing terminal size and new-line settings.]*
-*[Image: Figure 13. VL53L7CX ranging results - Command-line interface showing an 8x4 matrix of distance and signal measurements.]*
-*[Image: Figures 14-38. STM32CubeIDE Configuration - A series of software screenshots detailing project creation, board selection, middleware software pack selection for X-CUBE-TOF1, GPIO pin configurations (PB3, PA4, PB0, PB4), I2C1 setup, NVIC interrupt activation, and STLink debugger upgrading.]*
-*[Image: Figure 39. Results - Terminal output displaying standard SimpleRanging matrix data.]*
-*[Image: Figure 40-41. Threshold Detection Configuration - STM32CubeMX screenshots showing ThresholdDetection application selection and platform pin settings.]*
-*[Image: Figure 42. Result of the Threshold Detection example - Terminal output showing conditional distance matrix updates.]*
-*[Image: Figure 43. Interrupt - C code snippet setting LowThreshold to 200 and HighThreshold to 600.]*
-*[Image: Figures 44-47. SATEL Breakout Configuration - File trees and STM32CubeMX menus for the CUSTOM SimpleRanging application profile.]*
+**3. Available Features**
+Includes Ranging mode (Continuous/Autonomous), Sharpener, Target Order, Xtalk margin, and Motion detection.
+*[Image: Figure 9. Integration time for 4x4 autonomous - Timing diagram showing INT pin pulses and single integration time per measurement.]*
+*[Image: Figure 10. Integration time for 8x8 autonomous - Timing diagram showing four separate integration times per measurement block.]*
+*[Image: Figure 11. Example of scene using several sharpener values - Multiple 4x4 matrices illustrating how sharpener percentages (0%, 20%, 40%, 99%) affect edge detection between a 100mm and 500mm target.]*
+*[Image: Figure 12. Example of histogram with two targets - Bar chart showing signal peaks at 100mm and 700mm.]*
+*[Image: Figure 13. Xtalk margin - Bar chart demonstrating crosstalk signal threshold due to coverglass up to 600mm.]*
+*[Image: Figure 14. External synchronization flow - Flowchart showing synchronization via an external SYNC pin triggering individual ranging events.]*

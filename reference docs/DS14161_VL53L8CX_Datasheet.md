@@ -1,38 +1,30 @@
-# multi-zone-cover-window-coating-aperture-calculation.pdf
-[Image: A diagram illustrating Pitch and Roll angles relative to the sensor. The X dimension refers to the direction between emitter and transmitter. Pitch is the angle of deflection around the y-axis, and Roll is around the x-axis.][cite: 242]
+# DS14161 — VL53L8CX datasheet
 
-**STMicroelectronics multizone Time-of-Flight aperture calculator**[cite: 242]
+**1. Product Overview**
+The VL53L8CX is an 8x8 multizone ToF sensor with a 65° diagonal FoV, utilizing a 940 nm VCSEL.
+*[Image: Cover image - Close up of VL53L8CX sensor from top and bottom.]*
+*[Image: Figure 1. System FoV and exclusion zone - 3D geometric illustration defining the 45x45 degree system FoV within the larger 57.6x57.6 degree collector exclusion zone.]*
+*[Image: Figure 2. VL53L8CX FoI - Colorful heatmap showing 43.4x43.4 degree core illumination.]*
+*[Image: Figure 3. VL53L8CX block diagram - Silicon architecture showing SPAD array, ROM/RAM, Advanced Ranging Core, and VCSEL driver.]*
+*[Image: Figure 4. VL53L8CX pinout - Bottom view of 16 LGA pads (A1-A7, B1, B4, B7, C1-C7).]*
+*[Image: Figure 5. Typical application schematic for I2C - Wiring diagram showing 47k pullups on digital lines and SDA/SCL connections to host.]*
+*[Image: Figure 6. Typical application schematic for SPI - Wiring diagram adapting the interface for SPI (NCS, MISO, MOSI, MCLK).]*
 
-## Settings
-| Item | Value | Description |
-| :--- | :--- | :--- |
-| **Sensor selection** | VL53L8 | Supported devices are VL53L5, L7, L8, L9[cite: 242] |
-| **Coverglass thickness** | 1.00 | in millimeters[cite: 242] |
-| **Coverglass refractive index** | 1.5 | no unit[cite: 242] |
-| **Coverglass pitch y axis angle** | 0 | in degrees (not recommended)[cite: 242] |
-| **Coverglass roll x axis angle** | 7 | in degrees[cite: 242] |
-| **Airgap** | 0.81 | in millimeters[cite: 242] |
-| **Airgap/gasket refractive index** | 1 | no unit[cite: 242] |
-| **X, Y tolerances** | 300 | in micrometers[cite: 242] |
-| **Z tolerance** | 0.2 | in millimeters[cite: 242] |
-| **Rotation tolerance** | 0 | in degrees[cite: 242] |
+**2. Functional Description & Timing**
+*[Image: Figure 7. System functional description - High level block diagram linking Host API, I2C/SPI, and Sensor Firmware.]*
+*[Image: Figure 8. Power state machine - State transition diagram (Power Off -> HP Idle <-> LP Idle / Ranging).]*
+*[Image: Figure 9. Power up slew - Voltage graph specifying slew rates for AVDD, CORE_1V8, and IOVDD reaching 1.8V/3.3V.]*
+*[Images: Figures 10-20. Timing Diagrams - Comprehensive digital waveform diagrams documenting I2C start/stop conditions, read/write byte sequences, and SPI clock polarity/phase timing constraints.]*
 
-## Results (Automatically Computed)
-| Two circles (red circles) | Diameter (mm) | Circle center offset vs Optical axis (Xc) (mm) | Circle center offset vs Optical axis (Yc) (mm) |
-| :--- | :--- | :--- | :--- |
-| **Emitter** | 3.68 | 0.00 | 0.15[cite: 242] |
-| **Receiver** | 3.64 | 0.00 | 0.14[cite: 242] |
+**3. Ranging Performances**
+*[Image: Figures 21-22. Zone mapping - Grids defining the numbered array layout for 4x4 (0-15) and 8x8 (0-63) reporting structures.]*
+*[Image: Figure 23. Effective orientation - Diagram showing optical inversion mapping physical targets to the SPAD grid.]*
+*[Images: Figures 24-25. Range accuracy vs distance - Graphs showing error margins (+/- mm at short range, +/- % at long range) across continuous and autonomous modes.]*
 
-| Single oval (blue shape) | Size (mm) | Circle center offset vs Optical axis (Xce) (mm) | Circle center offset vs Optical axis (Yce) (mm) |
-| :--- | :--- | :--- | :--- |
-| **Emitter** | 7.66 | 0.00 | 0.15[cite: 242] |
-| **Receiver** | 3.68 | N/A | N/A[cite: 242] |
-
-| Two rectangles (red) | X size (mm) | Y size (mm) | Rectangle center offset vs optical axis (Xc) (mm) | Rectangle center offset vs optical axis (Yc) (mm) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Emitter** | 2.62 | 2.47 | 0.00 | 0.07[cite: 242] |
-| **Receiver** | 2.59 | 2.44 | 0.00 | 0.07[cite: 242] |
-
-| VL53L5CX/VL53L7/VL53L8 Single Rectangle | X size (mm) | Y size (mm) | Rectangle center offset vs optical axis (Xce) (mm) | Rectangle center offset vs optical axis (Yce) (mm) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Aperture size** | 6.60 | 2.47 | 0.00 | 0.07[cite: 242] |
+**4. Mechanical & Packaging**
+*[Images: Figures 26-29. Outline drawings - Engineering CAD drawings specifying 6.4 x 3.0 x 1.75 mm dimensions, pad pitches, and optical exclusion cone constraints.]*
+*[Image: Figure 30. Class 1 laser label - Standard safety warning label.]*
+*[Image: Figure 31. 2D marking - Laser etched tracking code on the module cap.]*
+*[Image: Figure 32. Tape and reel packaging - Dimensions and feed direction for automated assembly lines.]*
+*[Image: Figure 33. Recommended solder pattern - PCB land pattern drawing.]*
+*[Image: Figure 34. Solder profile - Reflow temperature curve targeting 240°C peak.]*

@@ -59,7 +59,7 @@ S2 need soldered bottom pads; one sensor per I2C bus keeps the default address
 `0x52`. The five range concurrently and the MCU drains each bus in turn.
 
 Numbers (round 7): a trimmed frame read costs ~0.97 ms on SPI at 3 MHz, so a
-worst-case pass where all five are simultaneously ready is **~4.35 ms = 6.5 %**
+worst-case pass where all five are simultaneously ready is **~4.9 ms = 7.3 %**
 of a 66.7 ms frame. 8×8 tops out at 15 Hz (api.h), so Mode A's sequential
 polling was never the bottleneck and the trim removed Mode B's only real
 advantage. Mode B still costs a TCA9406 plus pull-up engineering per I2C
@@ -110,8 +110,10 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
 1. Bidirectional Fm+ I2C translator (**TCA9406**) for SDA/SCL.
 2. `SPI_I2C_N` pulled **low** for I2C (R5 currently pulls it high = SPI). A fixed
    pull-down removes the bus-reset capability UM3109 mentions; a GPIO is better.
-3. `I2C_RST` allowed **low** for I2C (the library drives it low). The current
-   board pulls it high. Tie low or route to a GPIO (`I2C_RST_PIN` in `mode_b`).
+3. `SPI_I2C_N` (C1) pulled **low** for I²C (R5 currently pulls it high = SPI). A
+   fixed pull-down removes the bus-reset capability UM3109 mentions; a GPIO is
+   better. Note that this is the same pin the datasheet calls the I²C interface
+   reset — there is no separate `I2C_RST` pin on the VL53L8CX.
 4. Header exposes SDA/SCL.
 5. External I2C pull-ups on both rails (1.8 V sensor side, 3.3 V host side).
 6. `SYNC` (B1) is not a "start-of-frame align" line: UM3109 §4.15 describes it as
@@ -137,6 +139,10 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
   `configure()` + `start()` attempt — the 30 s loop is the retry mechanism. The
   probe matters at boot: a dead SPI sensor never errors, so `init()` alone burns
   ~4.8 s per attempt (~15 s per dead board, ~75 s for five missing boards).
+- **Worst-case blocking.** `init()` now returns as soon as a poll fails instead
+  of running every remaining poll, so an ACKing-but-wedged sensor costs at most
+  ~4.8 s (SPI) / ~6.8 s (I²C at 400 kHz) per attempt, not the unguarded ~12–15 s.
+  Boot and retry both make one attempt, so that bound applies once per pass.
 - **Silent-sensor back-off.** After 3 consecutive *silent* demotions (socket A
   answers `is_alive()` and starts, but never produces frames) the retry period
   goes 30 s → 300 s until a frame arrives again. That turns a permanent 1.3 %
@@ -145,8 +151,8 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
   re-baselines `last_update_ms[]` for every healthy sensor. Without that, one
   wedged sensor's ~2 s `init()` pushes all the others past their no-frame
   timeout and demotes the whole array.
-- A hung sensor with no reset line still needs a power cycle. The proposed
-  3V3_EXT load switch (below) gives the host that power cycle.
+- A hung sensor with no reset line still needs a power cycle. The 3V3_EXT load
+  switch gives the host that power cycle.
 
 ## Carrier items still open (from earlier rounds)
 
@@ -157,7 +163,9 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
     DS14161 Table 5 wants 0.9 → 1.6 V in ≤ **58.3 µs** and AVDD full level in
     ≤ 3.3 ms.
   - Keep the ≥ 47 µF bulk **upstream**. Downstream capacitance is 5 × 7.1 µF
-    plus 1 µF at VOUT ≈ 36.5 µF ⇒ inrush ≈ 1.27 A (fine); adding bulk
+    plus 1 µF at VOUT ≈ 36.5 µF on the 3.3 V side; the 1.8 V-side capacitors
+    (≈1.4 µF per board) charge through the LDO too, so inrush is ≈1.5 A —
+    inside the 2 A switch; adding bulk
     downstream pushes it to ≈ 2.9 A.
   - **100 kΩ pull-down on the switch's ON pin** — the datasheet does not state an
     internal one, and the rail must default off at host reset.
@@ -173,12 +181,12 @@ With the trimmed 320-byte frame, Mode A reads all five sensors in ~5 ms of a
 - **R6 = 6.8 kΩ, not 10 kΩ.** U3 has 71 kΩ typical internal pull-downs
   (SCES898C §7.3.9); with 10 kΩ, SCLK_S idles at 1.58 V (above V_IH = 1.26 V but
   thin). 6.8 kΩ gives 1.64 V. TI also warns that any external **pull-up** on a
-  data I/O must be ≤ 7 kΩ; never fit pull-ups here.
+  data I/O must be ≤ 7 kΩ; never fit a pull-**down** here.
 - **MISO when all boards are deselected: probably needs no part.** The same
   71 kΩ internal pull-downs bias MISO_H through ≈ 14.2 kΩ to GND across five
   boards. Scope it first; if it floats or sits mid-rail, fit a **47 kΩ
-  pull-down** at the host (never a pull-up — even 7 kΩ would sit ≈ 1.0 V against
-  the five internal pull-downs).
+  pull-down** at the host. Never a pull-up: 7 kΩ to 3.3 V against the ≈14.2 kΩ
+  combined pull-down would hold MISO_H at ≈2.2 V, defeating the Hi-Z release.
 
 ## Library requirements (unchanged)
 
@@ -221,6 +229,8 @@ size `0x15000`. 350 KB of RAM1 stays free; not worth a linker-script hack.
 
 ## Bring-up order
 
-1. `single_sensor_bringup` with one board on the header SPI.
+1. `single_sensor_bringup` with one board on the header SPI. Its serial `r`
+   command forces a re-init while the sensor is streaming — that is the R4
+   test (no `stop_ranging()`).
 2. `mode_a_single_bus` with all five on `SPI`.
 3. `mode_b_multi_bus` after the I2C carriers and bottom-pad harness exist.

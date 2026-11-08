@@ -27,7 +27,7 @@ demoted sensor). Everything else is millimetres.
 | External rail | 3.3 V, **≥ 1.5 A**, switched, separate from the Teensy |
 | Typical / peak current | 465 mA / 750 mA on the external rail |
 | Frame size | 320 B (trimmed from 1444 B) |
-| Status | Design **Rev 7**, review loop converged; verification round: 47 PASS / 10 NV / 0 FAIL |
+| Status | Design **Rev 8**, review loop converged; round-11 verification 47 PASS / 10 NV / 0 FAIL; pre-layout audit: 0 FAIL, all findings closed |
 
 > **The Teensy's own 3.3 V pin (~250 mA) never powers the array.** J1 carries
 > `3V3_EXT` from a separate supply. The two 3.3 V rails share only GND.
@@ -92,10 +92,10 @@ ever active.
 
 | Ref | Part | Package | Purpose |
 |---|---|---|---|
-| U1 | VL53L8CXV0GC/1 (with liner; liner removed after reflow) | LGA-16, 6.4 × 3.0 × 1.75 mm | The sensor. SPI mode, LPn and I²C_RST pulled up on board |
+| U1 | VL53L8CXV0GC/1 (with liner; liner removed after reflow) | LGA-16, 6.4 × 3.0 × 1.75 mm | The sensor. SPI mode; LPn and C1 `SPI_I2C_N` pulled up on board |
 | U2 | MIC5504-1.8YMT | DFN-4, 1.0 × 1.0 mm | 1.8 V LDO: CORE_1V8 + IOVDD + VCCA of U3/U5. EN tied to IN |
 | U3 | SN74AXC4T774RSVR | UQFN-16, 2.6 × 1.8 mm | SCLK / MOSI / MISO translator, **OE = NCS_S**, DIR1/2/3 = GND, DIR4 = 1V8 |
-| U5 | SN74AXC1T45 (DCK SC70-6 or DBV SOT-23-6) | SC70-6 / SOT-23-6 | NCS translator. **DIR = GND ⇒ B→A** (3.3 V host drives 1.8 V sensor) |
+| U5 | SN74AXC1T45DTQR | X2SON-6, 1.0 × 0.8 mm | NCS translator. **DIR = GND ⇒ B→A** (3.3 V host drives 1.8 V sensor) |
 | C1 | 4.7 µF X5R 10 V | 0402 | AVDD at sensor pin C4 (check DC-bias derating, else 0603) |
 | C2 | 100 nF | 0402 | CORE_1V8 at B7 |
 | C3 | 100 nF | 0402 | IOVDD at A3 |
@@ -131,7 +131,7 @@ carrier and system rows, DNP options flagged with Qty 0).
 
 ### 2.3 Why these parts
 
-- **TPS22918TDBVRQ1** (AEC-Q100, SOT-23-6 DBV) — 2 A, 52 mΩ typical.
+- **TPS22918TDBVRQ1** (AEC-Q100, SOT-23-6 DBV) — 2 A, 53 mΩ typical.
   Pins: 1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT. ON is high-threshold-safe
   (V_IH ≥ 1 V) but **must not float** — hence the 100 kΩ pull-down. R_ON at
   3.3 V is 53 mΩ typ / 59 mΩ max at 25 °C / **107 mΩ max over −40…+105 °C**,
@@ -174,10 +174,9 @@ carrier and system rows, DNP options flagged with Qty 0).
 | C | Five FlexIO SPI masters | Concurrent | **Dropped** — `FlexIOSPI` cannot do mode 3, and it buys no throughput |
 
 **Why Mode A wins.** A trimmed 320 B frame costs ≈0.97 ms on SPI at 3 MHz, so a
-worst-case pass with all five sensors ready is ≈4.35 ms — 6.5 % of a 66.7 ms
+worst-case pass with all five sensors ready is ≈4.9 ms — 7.3 % of a 66.7 ms
 frame. 8×8 tops out at 15 Hz anyway, so the sequential poll was never the
-bottleneck. Mode B's only historical advantage (two I²C buses needing 1 MHz to
-fit a frame) disappeared when the output trim cut the frame from 1444 to 320 B.
+bottleneck.
 
 **Mode B layout** (only if you deliberately build it): S0 `SPI` (13/11/12, CS 10),
 S1 `SPI1` (27/26/1, CS 0), S2 `SPI2` (37/35/34, CS 36), S3 `Wire` (SDA 18 / SCL 19),
@@ -202,8 +201,10 @@ S4 `Wire1` (SDA 17 / SCL 16). One sensor per I²C bus keeps the default address
 | 5 | `MISO` | Carrier → host | 3.3 V | U3 A4 → B4; Hi-Z unless that board is selected |
 | 6 | `NCS` | Host → carrier | 3.3 V | U5 B → A; also enables that board's U3 |
 
-Nothing else leaves the carrier. INT, SYNC, LPn and I²C_RST stay on-board, pulled
-to 1.8 V. There is no reset line: the rail switch is the reset.
+Nothing else leaves the carrier. INT, SYNC, LPn and C1 (`SPI_I2C_N`, which is
+also the I²C-mode interface reset) stay on-board, pulled to 1.8 V. There is no
+separate `I2C_RST` pin on the VL53L8CX and no reset line: the rail switch is the
+reset.
 
 ### 4.2 Teensy 4.0 pin map
 
@@ -254,7 +255,7 @@ of SCLK and MOSI only if you see ringing.
 
 | Rail | Source | Load | Notes |
 |---|---|---|---|
-| 3.3 V AVDD / VCCB | External, switched | 465 mA typ, 750 mA peak for all five | ≥ 1.5 A supply, 3.3 V ±3 % at the far board; switch drop 59 mV (25 °C) / 80 mV (hot) at 750 mA |
+| 3.3 V AVDD / VCCB | External, switched | 465 mA typ, 750 mA peak for all five | ≥ 1.5 A supply; **3.3 V ±3 % measured at J1-1 of the far carrier**, not at the supply terminals; switch drop 59 mV (25 °C) / 80 mV (hot) at 750 mA |
 | 1.8 V CORE/IOVDD/VCCA | U2 per board | ~90 mA peak per board | 1.746–1.854 V; 135 mW dissipated per LDO |
 | Teensy | USB | ~40–100 mA | Never feeds the sensors |
 
@@ -263,6 +264,16 @@ Slew requirements from DS14161 Table 5 (these are **minimums**):
 The load switch's ~95 µs rise gives CORE_1V8 ≈25 µs of window if the LDO
 input-tracks, ≈48.6 µs worst case if the LDO's own turn-on governs — both
 inside 58.3 µs. Do not add a CT capacitor unless the scope says otherwise.
+
+Downstream capacitance is 36.5 µF on the 3.3 V side; the 1.8 V-side capacitors
+(C7, C2, C3, C4, C8 ≈ 1.4 µF per board) add ≈7 µF effective, so the switch
+inrush is ≈1.5 A — still inside the 2 A rating but closer than the 3.3 V-only
+tally suggests. Keep the ≥ 47 µF bulk **upstream** of the switch.
+
+**Supply setting.** The switch drop plus the harness can consume ~0.19 V at
+750 mA. Specify and measure the 3.3 V ±3 % at the far carrier, or set the bench
+supply to ~3.4 V so the far board stays ≥ 3.13 V. C10 sits upstream of the
+switch and therefore does not buffer sag in the harness after it.
 
 ---
 
@@ -289,8 +300,8 @@ arduino-cli compile --fqbn teensy:avr:teensy40 \
 Use `--libraries "code/drivers_libraries"` so the patched library wins over any
 stock copy in
 `Documents/Arduino/libraries`. Verified with arduino-cli 1.5.1 / teensy:avr
-1.62.0. Footprints: Mode A 46 672 flash / 108 544 RAM1; Mode B 47 776 / 110 624;
-bring-up 45 840 / 99 040.
+1.62.0. Footprints (Rev 8): Mode A 46 736 flash / 108 576 RAM1; Mode B
+47 904 / 110 624; bring-up 46 032 / 99 040.
 
 ### The vendored library is patched — do not replace it
 
@@ -321,6 +332,9 @@ CS-settle macro, chunk size and trim macros, plus a `static_assert` on the
   retry, so a missing board costs milliseconds instead of ~15 s.
 - **Demotion.** 50 consecutive driver errors, or no frame for
   `max(2000 ms, 5 × frame period)`, demotes a sensor; its column becomes `-1`.
+- **No silent CSV.** A line is printed every frame period even when no sensor
+  has a fresh frame (all columns `-1`), so a dead array is distinguishable from
+  a hung host.
 - **Retry.** One demoted sensor per loop pass, at most every 30 s, with a single
   `configure()` + `start()` attempt. The retry runs **before** the no-frame check
   and re-baselines healthy sensors, so one wedged sensor cannot cascade-demote
@@ -329,6 +343,11 @@ CS-settle macro, chunk size and trim macros, plus a `static_assert` on the
   30 s → 300 s until a frame returns.
 - **Recovery.** Re-init handles a running or confused sensor. A hung sensor or a
   stuck I²C bus needs the rail switch: drop RAIL_EN, wait, raise it, re-init.
+- **Worst-case blocking.** With the early-exit checks in `init()`, a sensor that
+  ACKs but wedges during bring-up costs at most ~4.8 s (SPI) / ~6.8 s
+  (I²C at 400 kHz) per attempt instead of the unguarded ~12–15 s. The retry runs
+  before the no-frame check and re-baselines healthy sensors, so that stall is
+  bounded and does not cascade.
 
 ---
 
@@ -378,13 +397,15 @@ Numbers are pass criteria, not suggestions.
    If it floats, fit a 47 kΩ **pull-down** at the host; never a pull-up.
 9. Dead-sensor drill: cut one board's 3V3_EXT only. Its column → `-1` within
    ~2 s, the other columns keep streaming, it returns within 40 s of restore.
-10. Forced demote on a **streaming** sensor (test sketch): `demote(i)`, then
-    confirm the 30 s retry re-inits it without `stop_ranging()` and frames resume.
+10. Forced re-init on a **streaming** sensor (R4): in `single_sensor_bringup`
+    send `r` over serial. Confirm `init()` returns OK, frames resume, and no
+    `stop_ranging()` was involved.
 
 **Stage 2 — five carriers**
 11. Worst-case loop pass ≤ ~5 ms; CSV up to ~75 lines/s.
 12. Remove one board: isolation as in step 9. Remove all five: loop stays alive,
-    all columns `-1`, retries round-robin.
+    all columns `-1` at the frame cadence (the firmware prints even with no
+    fresh frame), retries round-robin.
 13. Rail current 400–550 mA sustained; scope far-board AVDD ≥ 3.13 V.
 14. 10-minute thermal check on the five LDOs (~135 mW each).
 
@@ -400,11 +421,23 @@ Numbers are pass criteria, not suggestions.
 ## 9. Verification status
 
 The design has been through 11 adversarial review rounds against the primary
-datasheets (DS14161 Rev 7, SCES898C, SCES882E, TCA9406, MIC550x, TPS22918,
-Teensyduino core). Rounds 9–10 produced no BLOCKER/MAJOR/MINOR findings; round 11
-was a **verification pass**, not a review: 57 rows, **47 PASS / 10 NV / 0 FAIL**.
+datasheets (DS14161 Rev 7/12, SCES898C, SCES882E, TCA9406, MIC550x, TPS22918,
+Teensyduino core), plus a pre-layout audit of Rev 7. Rounds 9–10 produced no
+BLOCKER/MAJOR/MINOR findings; round 11 was a **verification pass**: 57 rows,
+**47 PASS / 10 NV / 0 FAIL**. The pre-layout audit found no BLOCKER; its two
+MAJOR items were datasheet questions, now closed below.
 
-There is nothing left to fix in the source. Eight of the ten NV rows are still
+Facts verified against DS14161 Table 3 (the pin-description table the audit
+could not read):
+
+| Item | Result |
+|---|---|
+| U1 A6/A7/C6 (`RSVD1`–`RSVD3`) | **Connect to ground.** The design's GND tie is correct. |
+| U1 C1 (`SPI_I2C_N`) | In SPI mode: 47 kΩ pull-up to IOVDD (R5). In I²C mode: 47 kΩ pull-down, and the pin doubles as the **I²C interface reset** (active high toggle). There is no separate `I2C_RST` pin. |
+| U1 C5 (`MISO`) | I²C mode: do not connect — matches the SPI-only design. |
+| U1 C2 (`NCS`) | SPI: active-low chip select, 47 kΩ pull-up (R1 on NCS_S). |
+
+Nothing is left to fix in the source. Eight of the ten NV rows are still
 open (R1, R5 and the U1/J1 document checks have since closed); all are bench- or
 document-only closures:
 
@@ -419,7 +452,7 @@ document-only closures:
 | R7 | I²C rise time at 400 kHz | scope ≤ 300 ns | 1.5 kΩ pull-ups |
 | R8 | LPSPI SCK duty (RM-derived 50 %) | scope 40–60 % | Clock-root change (very unlikely) |
 | R9 | Far-end AVDD under the real harness | DMM under peak load ≥ 3.13 V | Shorten / upgrade harness |
-| R10 | Rev-7 compile/RAM numbers unrecorded | one arduino-cli run | Blocks nothing |
+| R10 | Rev-8 compile/RAM numbers | **Closed** — Arduino CLI 1.5.1 / teensy:avr 1.62.0: Mode A 46 736 / 108 576, Mode B 47 904 / 110 624, bring-up 46 032 / 99 040 | — |
 
 Only **R4** could force a design change. Everything else has a measurement that
 either passes or has a staged fallback already designed in.
@@ -451,7 +484,9 @@ either passes or has a staged fallback already designed in.
   out the board.
 - `code/teensy4/README.md` — firmware, pin maps, library patch details.
 - `review/CONTEXT.md` — one-page context and the review history.
-- `pcb design/DS_vl53l8cx.pdf`, `an5897-*.pdf`, `pcb-manufacturing-guidelines-*.pdf`
-  — the primary mechanical, thermal and assembly sources.
-- `reference docs/` — markdown conversions of DS14161, UM3109, AN5894, AN5939-class
-  notes, and the field-of-view / aperture calculator.
+- `pcb design/DS14161_VL53L8CX_Datasheet.pdf`, `AN5897_VL53L8_Thermal_Guidelines.pdf`,
+  `VL53L8_PCB_Manufacturing_Guidelines.pdf` — the primary mechanical, thermal
+  and assembly sources.
+- `reference docs/` — markdown conversions of DS14161, DB4884, UM3108/UM3109,
+  AN5894/AN5897/AN6271, TN1531/TN1532, plus the field-of-view and aperture
+  calculators and the component datasheets under `components/`.

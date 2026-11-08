@@ -28,8 +28,9 @@
 // Output trimming (round 6): ambient / spads / signal / sigma / reflectance /
 // motion blocks are disabled in the custom config, cutting a frame from ~1444
 // to ~320 bytes.
-#if !defined(VL53L8CX_DISABLE_AMBIENT_PER_SPAD) || !defined(VL53L8CX_DISABLE_SIGNAL_PER_SPAD) \
- || !defined(VL53L8CX_DISABLE_MOTION_INDICATOR)
+#if !defined(VL53L8CX_DISABLE_AMBIENT_PER_SPAD) || !defined(VL53L8CX_DISABLE_NB_SPADS_ENABLED) \
+ || !defined(VL53L8CX_DISABLE_SIGNAL_PER_SPAD) || !defined(VL53L8CX_DISABLE_RANGE_SIGMA_MM) \
+ || !defined(VL53L8CX_DISABLE_REFLECTANCE_PERCENT) || !defined(VL53L8CX_DISABLE_MOTION_INDICATOR)
 #error "Output trimming missing: the patched platform_config_custom.h is not being used"
 #endif
 static_assert(sizeof(VL53L8CX_ResultsData) <= 512,
@@ -79,6 +80,7 @@ static uint8_t  silent_fails[NUM_SENSORS]  = {0};
 static int16_t  last_mm[NUM_SENSORS];
 static uint32_t last_update_ms[NUM_SENSORS];
 static uint32_t last_retry_ms[NUM_SENSORS];
+static uint32_t last_print_ms = 0;
 static VL53L8CX_ResultsData results;       // reused, 64 zones
 
 static void park_all_ncs_high() {
@@ -151,10 +153,10 @@ static void bring_up_all() {
       Serial.printf("# S%u not responding at boot\n", i);
       continue;
     }
-    for (uint8_t a = 0; a < 3 && !sensor_ok[i]; a++) {
-      sensor_ok[i] = configure(i);
-      if (!sensor_ok[i]) delay(50);
-    }
+    // One attempt only at boot as well: a failed init() can block for seconds,
+    // and the 30 s retry loop is the retry mechanism. Retrying here only delays
+    // the other boards (and the first CSV line).
+    sensor_ok[i] = configure(i);
   }
   for (uint8_t i = 0; i < NUM_SENSORS; i++) {
     if (sensor_ok[i]) {
@@ -236,9 +238,12 @@ void loop() {
     updated_any = true;
   }
 
-  // Print only when at least one sensor produced a frame.
-  if (updated_any) {
-    uint32_t now = millis();
+  // Print when a sensor produced a frame, and at the frame cadence even when
+  // none did: the host must be able to tell a dead array from a hung firmware
+  // (an all -1 line every FRAME_PERIOD_MS).
+  uint32_t now = millis();
+  if (updated_any || (now - last_print_ms >= FRAME_PERIOD_MS)) {
+    last_print_ms = now;
     Serial.printf("%lu", (unsigned long)now);
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
       bool fresh = sensor_ok[i] && (now - last_update_ms[i] <= STALE_MS);
