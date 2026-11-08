@@ -382,7 +382,7 @@ Notes on the sketch
 
 | Ref | Part | Package | Purpose | Qty/board |
 |---|---|---|---|---|
-| U1 | VL53L8CXV9GC/1 (no liner) or V0GC/1 (liner) | LGA16 6.4×3.0×1.75 | Sensor | 1 |
+| U1 | VL53L8CXV0GC/1 (liner version) | LGA16 6.4×3.0×1.75 | Sensor | 1 |
 | U2 | MIC5504-1.8YMT | 4-pin DFN 1.0×1.0 | 1.8 V → CORE_1V8 + IOVDD + VCCA of U3, U5 | 1 |
 | U3 | SN74AXC4T774RSVR | UQFN-16 2.6×1.8 | SCLK / MOSI / MISO translator, **OE = NCS_S** | 1 |
 | **U5 (new)** | SN74AXC1T45 (DCK SC70-6 or DBV SOT-23-6; suffix to confirm) | SC70-6 / SOT-23-6 | **NCS translator** (host → sensor) | 1 |
@@ -402,7 +402,7 @@ Notes on the sketch
 | R5 | 47 kΩ | 0402 | SPI_I2C_N → IOVDD | 1 |
 | **R6 (new)** | 6.8 kΩ | 0402 | SCLK_S → 1V8 (no spurious edge on selection, §2.3; idle 1.64 V vs 71 kΩ internal pull-down) | 1 |
 | **R7 (new)** | 4.7 kΩ | 0402 | NCS_H → 3V3 (hold deselected at host reset, §2.4) | 1 |
-| J1 | 1×6 header, 2.54 mm | THT | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS | 1 |
+| J1 | PH1-06-UA (Adam Tech), 1×6 header, 2.54 mm | THT | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS | 1 |
 | | **SMD parts** (U1–U3, U5, C1–C9, R1–R7) | | | **20** |
 
 **Whole system:** 5 × 20 = **100 SMD parts**, 5 headers, the **Teensy 4.0** and the external 3.3 V supply.
@@ -411,7 +411,7 @@ Notes on the sketch
 
 | Ref | Part | Value / notes | Qty |
 |---|---|---|---|
-| U10 | Load switch, TPS22918-class | ≥ 1.5 A, 3.3 V; **CT open** (t_R ≈ 95 µs). One switch feeds all five carriers | 1 |
+| U10 | Load switch, `TPS22918TDBVRQ1` | ≥ 1.5 A, 3.3 V; **CT open** (t_R ≈ 95 µs); **QOD tied to VOUT** (internal 25 Ω). One switch feeds all five carriers | 1 |
 | R10 | 100 kΩ 0402 | ON pin → GND. The rail must default **off**; the datasheet does not state an internal pull-down | 1 |
 | C10 | 22 µF 0603 | at the switch VIN. IR-drop reservoir: ~0.43 Ω round trip of 28 AWG × 750 mA ≈ 0.32 V of far-end sag on a load step | 1 |
 | C11 | 1 µF 0402 | at the switch VOUT (datasheet C_OUT minimum) | 1 |
@@ -499,7 +499,7 @@ Optional, not counted: R8 47 kΩ MOSI_S → 1V8 (if the sensor's MOSI input is s
 - Sensor power ≈ 215 mW typ / 320 mW max per sensor [V Rev 1, AN5897]; five sensors: 1.1 W typ / 1.6 W max, **sensor-only**.
 - **The external rail carries more than the sensors:** it also feeds the five 1.8 V LDOs. Rail-side: 465 mA typ × 3.3 V ≈ 1.5 W typ, 750 mA peak × 3.3 V ≈ 2.5 W peak. Size the supply and connectors from these numbers, not the sensor-only figure.
 - **Teensy 4.0:** ≈ 0.13 W (40 mA × 3.3 V) from its own USB-side regulator. Comfortable. Its 3.3 V pin (~250 mA) is **not** used by the carrier.
-- **Load switch drop:** ≤ 78 mΩ × 0.75 A ≈ 59 mV peak; 22 µF at VIN plus ≥ 47 µF upstream at the regulator.
+- **Load switch drop:** R_ON 53 mΩ typ / 59 mΩ max at 25 °C / 107 mΩ max over −40…+105 °C ⇒ ≤ 44 mV typ, **≤ 80 mV worst case** at 750 mA; 22 µF at VIN plus ≥ 47 µF upstream at the regulator.
 - External buck at 3.3 V, 0.75 A peak, ~90 % efficient: ≈ 0.28 W loss.
 
 ### 9.4 Optical integration and handling
@@ -550,7 +550,7 @@ AN5939 Rev 3 Table 5 [V]: air gap + glass < 1.5 mm; air gap < 0.5 mm without a g
 5. **U3/U5 pin numbers** — **U5 is confirmed** (VCCA 1, GND 2, A 3, B 4, DIR 5, VCCB 6; DIR = GND ⇒ B→A) and **MIC5504 is confirmed** (VOUT 1, GND 2, EN 3, VIN 4, EP) from the datasheet conversions in `reference docs/components/`. **U3 (RSV) pin numbers remain [U]** — the conversion has a pin-function table but no numbered pinout; confirm VCCA 14 / VCCB 13 / GND 8 / OE 7 / A1–A4 1–4 / B1–B4 12–9 / DIR1/2 15/16 / DIR3/4 5/6 on TI's drawing before layout (§8).
 6. **R7 back-feed** makes "any power-up order" false; the 3V3_EXT load switch is the fix (§13.9).
 5. **Worst-case current** assumes simultaneous 150 mA peaks; a real array may stay lower, but the supply should be sized for 750 mA.
-6. **Items I could not retrieve (Rev 5 status):** *resolved* — AXC4T774 tEN/tDIS (SCES898C §5.11: t_EN ≤ 26 ns, t_DIS ≤ 20 ns) and pull-down behaviour with OE high (71 kΩ static, §7.3.9); AXC1T45 DIR reference rail (VCCA); `vl53l8cx.h` constructor and API (all verified against the vendored source). *Still open, bench-only* — ME6217C33M5G dissipation/θJA, and the load switch's t_D at CT = 0 and reverse-current behaviour. Rev 1's list (TXU0304 pin map, TLV755P soft-start, etc.) no longer applies to this design except where noted.
+6. **Items I could not retrieve (Rev 7 status):** *resolved* — AXC4T774 tEN/tDIS (SCES898C §5.11: t_EN ≤ 26 ns, t_DIS ≤ 20 ns) and pull-down behaviour with OE high (71 kΩ static, §7.3.9); AXC1T45 DIR reference rail (VCCA) and pin numbers; MIC5504 pin numbers; `vl53l8cx.h` constructor and API (all verified against the vendored source); TPS22918-Q1 R_ON, ON V_IH, QOD and t_R(CT open) (§13.15). *Still open, bench-only* — the load switch's t_D at CT = 0, its reverse-current behaviour, and t_R under the real 36.5 µF load.
 
 ---
 
@@ -902,10 +902,10 @@ the retry path).
 ### 13.14 Component-level verification (Rev 7, datasheet audit)
 
 The nine datasheet conversions in `reference docs/components/` were read and
-checked against the carrier BOM. **Note:** the files are mis-named — each file
-holds another part's content (e.g. `MIC5501-4_300mA_LDO.md` contains the
-SN74AXC4T774 text, `SN74AXC4T774_4bit_Level_Translator.md` contains the MIC5504
-text). Match by content, not filename, before re-uploading.
+checked against the carrier BOM. **Note:** the nine files were mis-named on upload — each held another part's
+content (e.g. `MIC5501-4_300mA_LDO.md` contained the SN74AXC4T774 text). They
+have been **renamed to match their content**; `tps22918-q1.md` and
+`DS_VL53L8CX_Datasheet.md` were added later.
 
 | Item | Result |
 |---|---|
@@ -930,6 +930,42 @@ Component list re-check (the list supplied was from the pre-Rev-4 design):
   and `BB` thickness codes are not listed in the supplied Yageo X5R catalog, so
   confirm them on the distributor page.
 
-Still to source manually: U1 (VL53L8CX), J1 (1×6 2.54 mm THT), R6 (6.8 kΩ 0402),
-and the whole system BOM (TPS22918-class switch, 100 kΩ ON pull-down, 22 µF at
-VIN, ≥ 47 µF bulk, 3.3 V supply, harness, stencil).
+Still to source manually: the system BOM (100 kΩ ON pull-down, 22 µF at VIN,
+≥ 47 µF bulk, 3.3 V supply, harness, stencil). U1, J1, R6 and U10 are now
+selected — see §13.15.
+
+### 13.15 Component selection closed (Rev 7)
+
+| Ref | Selected part | Note |
+|---|---|---|
+| U1 | `VL53L8CXV0GC/1` | Liner version (no reflow-tape liner handling); MSL 3 rules still apply |
+| J1 | `PH1-06-UA` (Adam Tech) | 1×6, 2.54 mm THT. Confirm straight vs right-angle and the plating behind the `UA` suffix on the Adam Tech drawing |
+| R6 | `AC0402FR-076K8L` (Yageo AC) | 6.8 kΩ ±1 %. Replaces the superseded 10 kΩ `AC0402DR-0710KL`. Idle 1.64 V vs V_IH 1.26 V |
+| U10 | `TPS22918TDBVRQ1` | AEC-Q100, SOT-23-6 (DBV), 2 A, 52 mΩ typ |
+
+**TPS22918-Q1 facts now verified** (`reference docs/components/tps22918-q1.md`):
+
+- Pins DBV: **1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT**.
+- **ON V_IH ≥ 1 V, V_IL ≤ 0.5 V**, and ON "cannot be left floating" ⇒ the
+  100 kΩ pull-down (R10) is mandatory, not optional.
+- **R_ON** at 3.3 V: 53 mΩ typ, **59 mΩ max at 25 °C**, **107 mΩ max over
+  −40…+105 °C**. Drop at 750 mA: ≤ 44 mV typ, **≤ 80 mV worst case**.
+  The earlier "≤ 78 mΩ ⇒ 59 mV" figure was optimistic; use 107 mΩ.
+- **t_R (CT open) = 95 µs at 3.3 V**, t_ON 1430 µs, t_F 2 µs — matches the
+  275 µs CORE_1V8-tracking budget. The table is valid when VIN is already
+  steady before ON is asserted, which is exactly this design (bulk is upstream,
+  ON comes from a GPIO).
+- **t_D at CT = 0 is not tabulated** (only at CT = 1000 pF: 590 µs). The
+  firmware's 5 ms rail-settle wait covers any plausible value.
+- **QOD is a pin, not a feature that is always on.** Options: tie QOD to VOUT
+  (internal R_PD), add R_EXT, or leave open (disabled). **This design must tie
+  pin 5 to VOUT** — otherwise the "rail cycle recovers a hung sensor" claim is
+  false. R_PD = 25 Ω at 3.3 V ⇒ 36.5 µF decays with τ ≈ 0.9 ms.
+- Current: 2 A continuous at T_A = 70 °C, **1.5 A at 85 °C** — still above the
+  750 mA array peak. C_IN ≥ 1 µF per the recommended operating conditions.
+- CT if ever fitted: ≥ 25 V rated (the text says 25 V; the table says 16 V for
+  1.2–4 V — use 25 V).
+
+**Consequence:** R1 is closed on paper; the bench still scopes t_R under the real
+36.5 µF load (datasheet t_R assumes C_L = 0.1 µF). QOD-to-VOUT is a new layout
+requirement and is now in the guide's system-power step and do-not list.

@@ -1,124 +1,105 @@
-# MIC5501/2/3/4 — 300 mA Single-Output LDO in Small Packages
+# Yageo RC_L Series — General-Purpose Chip Resistors
 
-Source file: `MIC5501-02-03-04-300mA-Single-Output-LDO-in-Small-Packages-DS20006006.pdf`
+Source file: `PYU-RC_GROUP_51_ROHS_L.pdf`
 
-## Features
-- Input voltage range: 2.5 V to 5.5 V
-- Fixed output voltages: 1.0 V to 3.3 V
-- 300 mA ensured output current
-- High output accuracy: ±2%
-- Low quiescent current: 38 µA
-- Stable with 1 µF ceramic output capacitors
-- Low dropout: 160 mV @ 300 mA
-- Output discharge circuit: MIC5502, MIC5504
-- Internal enable pull-down: MIC5503, MIC5504
-- Thermal-shutdown and current-limit protection
-- 4-lead 1.0 mm × 1.0 mm UDFN package
-- MIC5501/4 available in 5-lead SOT-23
+## Scope
+RC series chip resistors with lead-free terminations, thick-film process.
 
 ## Applications
-- Smartphones
-- DSC, GPS, PMP, PDAs
-- Medical devices
-- Portable electronics
-- 5 V systems
+All general-purpose applications.
 
-## General Description
-The MIC5501/2/3/4 are general-purpose 300 mA LDOs in ultra-small packages. MIC5502 and MIC5504 include auto-discharge when EN is low. MIC5503 and MIC5504 have an internal pull-down on EN, disabling output when EN floats. Ideal for battery-powered applications: 2% initial accuracy, low dropout, low ground current, zero-off-mode current when disabled. Operating junction temperature: -40°C to +125°C.
+## Features
+- Halogen-free epoxy
+- RoHS compliant
+- Lead-free terminations meet RoHS requirements
+- Pb-glass in electrodes/resistor element/glass exempted by RoHS
+- High component and equipment reliability
+- Saves PCB space
+- MSL class: MSL 1
 
-## Package Types
-- MIC5501/2/3/4: 4-lead UDFN (MT), 1 mm × 1 mm
-- MIC5501/4: 5-lead SOT-23-5 (M5)
+## Ordering Information — Global Part Number
+Format:
+`RC XXXXX X X X X XXXX L`
 
-## Typical Application Circuit
-- \(V_{IN}\) to VIN
-- 1 µF input capacitor
-- 1 µF output capacitor
-- EN control
-- GND
+| Field | Meaning |
+|---|---|
+| (1) Size | 0075/0100/0201/0402/0603/0805/1206/1210/1218/2010/2512 |
+| (2) Tolerance | B=±0.1%, D=±0.5%, F=±1.0%, J=±5.0% |
+| (3) Packaging | R=paper taping reel; K=embossed taping reel; S=ESD-safe reel (0075/0100 only) |
+| (4) TCR | Based on spec |
+| (5) Reel/power | 07=7-in standard; 10=10-in; 13=13-in; 7W=7-in 2× standard power; 7D=7-in 2× standard quantity; 7N=7-in ESD-safe; 3W=13-in 2× standard power |
+| (6) Resistance | 2–4 digits; R/K/M = decimal point; e.g. 97R6=97.6 Ω, 9K76=9.76 kΩ, 1M=1 MΩ |
+| (7) Default | L |
 
-## Absolute Maximum Ratings
+Example: `RC0402JR-07100KL` = RC0402, ±5%, 7-in reel, 100 kΩ.
 
-| Parameter | Min | Max | Unit |
-|---|---:|---:|---|
-| Supply voltage \(V_{IN}\) | -0.3 | +6 | V |
-| Enable voltage \(V_{EN}\) | -0.3 | \(V_{IN}\) | V |
-| Power dissipation | Internally limited | — | — |
-| ESD rating | 3 kV | — | V |
+## Marking
+- RC0075/0100/0201/0402: no marking
+- RC0603:
+  - 1%, 0.5%, E24 exception values: 3 digits
+  - 1%, 0.5%, E96: EIA-96 marking
+  - 5%, E24: 3 digits
+- RC0805/1206/1210/2010/2512:
+  - 1%, 0.5%: 4 digits
+  - 5%: 3 digits
+- RC1218:
+  - E-24 ±5%: 3 digits
+  - E-24/E-96 ±1%, ±0.5%: 4 digits
 
-## Operating Ratings
+## Construction
+High-grade ceramic body, internal metal electrodes, thick-film resistive element, laser trimmed, protective epoxy coat, matte tin over Ni barrier terminations.
 
-| Parameter | Min | Max | Unit |
-|---|---:|---:|---|
-| Supply voltage \(V_{IN}\) | 2.5 | 5.5 | V |
-| Enable voltage \(V_{EN}\) | 0 | \(V_{IN}\) | V |
+## Dimensions
 
-## Electrical Characteristics
-Conditions: \(V_{IN}=V_{EN}=V_{OUT}+1V\), \(C_{IN}=C_{OUT}=1\ \mu F\), \(I_{OUT}=100\ \mu A\), \(T_J=+25°C\); bold values indicate -40°C to +125°C.
+| Type | L (mm) | W (mm) | H (mm) | l1 (mm) | l2 (mm) |
+|---|---:|---:|---:|---:|---:|
+| RC0075 | 0.30 ± 0.01 | 0.15 ± 0.01 | 0.13 ± 0.01 | 0.08 ± 0.03 | 0.08 ± 0.03 |
+| RC0100 | 0.40 ± 0.02 | 0.20 ± 0.02 | 0.13 ± 0.02 | 0.10 ± 0.03 | 0.10 ± 0.03 |
+| RC0201 | 0.60 ± 0.03 | 0.30 ± 0.03 | 0.23 ± 0.03 | 0.10 ± 0.05 | 0.15 ± 0.05 |
+| RC0402 | 1.00 ± 0.05 | 0.50 ± 0.05 | 0.35 ± 0.05 | 0.20 ± 0.10 | 0.25 ± 0.10 |
+| RC0603 | 1.60 ± 0.10 | 0.80 ± 0.10 | 0.45 ± 0.10 | 0.25 ± 0.15 | 0.25 ± 0.15 |
+| RC0805 | 2.00 ± 0.10 | 1.25 ± 0.10 | 0.50 ± 0.10 | 0.35 ± 0.20 | 0.35 ± 0.20 |
+| RC1206 | 3.10 ± 0.10 | 1.60 ± 0.10 | 0.55 ± 0.10 | 0.45 ± 0.20 | 0.45 ± 0.20 |
+| RC1210 | 3.10 ± 0.10 | 2.60 ± 0.15 | 0.55 ± 0.10 | 0.45 ± 0.15 | 0.50 ± 0.20 |
+| RC1218 | 3.10 ± 0.10 | 4.60 ± 0.10 | 0.55 ± 0.10 | 0.45 ± 0.20 | 0.40 ± 0.20 |
+| RC2010 | 5.00 ± 0.10 | 2.50 ± 0.15 | 0.55 ± 0.10 | 0.60 ± 0.20 | 0.55 ± 0.20 |
+| RC2512 | 6.35 ± 0.10 | 3.10 ± 0.15 | 0.55 ± 0.10 | 0.60 ± 0.20 | 0.60 ± 0.20 |
 
-| Parameter | Symbol | Min | Typ | Max | Unit | Conditions |
-|---|---|---:|---:|---:|---|---|
-| Output voltage accuracy | \(V_{OUT}\) | -2.0 | — | 2.0 | % | Variation from nominal |
-| Output voltage accuracy over temp | \(V_{OUT}\) | -3.0 | — | 3.0 | % | -40°C to +125°C |
-| Line regulation | — | — | 0.02 | 0.3 | %/V | \(V_{IN}=V_{OUT}+1V\) to 5.5 V |
-| Load regulation | — | — | 8 | 40 | mV | \(I_{OUT}=100\ \mu A\) to 300 mA |
-| Dropout voltage | \(V_{DO}\) | — | 80 | 190 | mV | \(I_{OUT}=150\ mA\) |
-| Dropout voltage | \(V_{DO}\) | — | 160 | 380 | mV | \(I_{OUT}=300\ mA\) |
-| Ground pin current | \(I_{GND}\) | — | 38 | 55 | µA | \(I_{OUT}=0\ mA\) |
-| Ground pin current | \(I_{GND}\) | — | 42 | 65 | µA | \(I_{OUT}=300\ mA\) |
-| Shutdown ground current | \(I_{GND(SHDN)}\) | — | 0.05 | 1 | µA | \(V_{EN}=0V\) |
-| Ripple rejection | PSRR | — | 60 | — | dB | \(f=1\ kHz\), \(C_{OUT}=1\ \mu F\) |
-| Current limit | \(I_{LIM}\) | 400 | 630 | 900 | mA | \(V_{OUT}=0V\) |
-| Output voltage noise | \(e_n\) | — | 175 | — | µV RMS | 10 Hz–100 kHz |
-| Auto-discharge NFET resistance | — | — | 25 | — | Ω | MIC5502/4, \(V_{EN}=0V\), \(V_{IN}=3.6V\), \(I_{OUT}=-3mA\) |
-| Enable pull-down resistor | — | — | 4 | — | MΩ | MIC5503/5504 |
-| Logic-low enable input voltage | \(V_{EN}\) | — | — | 0.2 | V | — |
-| Logic-high enable input voltage | \(V_{EN}\) | 1.2 | — | — | V | — |
+## Electrical Characteristics (Representative)
 
-## Thermal Specifications
-- Storage temperature: -65°C to +150°C
-- Max junction temperature: +150°C
-- Operating junction temperature: -40°C to +125°C
-- Lead temperature: +260°C, soldering 10 s
-- θJA: 250°C/W (1 mm × 1 mm UDFN), 253°C/W (SOT-23-5)
+| Type | Power | Operating Temp | Max Working Voltage | Max Overload Voltage | Resistance Range | TCR |
+|---|---:|---|---:|---:|---|---|
+| RC0201 | 1/20 W | -55°C to +125°C | 25 V | 50 V | 1 Ω–100 MΩ | -100 to +350 ppm/°C |
+| RC0402 | 1/16 W | -55°C to +155°C | 50 V | 100 V | 1 Ω–100 MΩ | ±200/±100 ppm/°C |
+| RC0603 | 1/10 W | -55°C to +155°C | 75 V | 150 V | 1 Ω–22 MΩ | ±200/±100 ppm/°C |
+| RC0805 | 1/8 W | -55°C to +155°C | 150 V | 300 V | 1 Ω–100 MΩ | ±200/±100 ppm/°C |
+| RC1206 | 1/4 W | -55°C to +155°C | 200 V | 400 V | 1 Ω–100 MΩ | ±200/±100 ppm/°C |
+| RC1210 | 1/2 W | -55°C to +155°C | 200 V | 500 V | 1 Ω–100 MΩ | ±200/±100 ppm/°C |
+| RC1218 | 1 W | -55°C to +155°C | 200 V | 500 V | 1 Ω–1 MΩ | ±200/±100 ppm/°C |
+| RC2010 | 3/4 W | -55°C to +155°C | 200 V | 500 V | 1 Ω–22 MΩ | ±200/±100 ppm/°C |
+| RC2512 | 1 W / 2 W | -55°C to +155°C | 200 V | 500 V | 1 Ω–22 MΩ | ±200/±100 ppm/°C |
 
-## Pin Function Table
+Jumper criteria: <50 mΩ, rated current 0.5 A to 10 A depending on size.
 
-| UDFN Pin | SOT23-5 Pin | Pin Name | Description |
-|---|---|---|---|
-| 1 | 5 | VOUT | Output voltage. MIC5502/5504 switch internal 25 Ω load to discharge external capacitor when disabled. |
-| 2 | 2 | GND | Ground. |
-| 3 | 3 | EN | Active-high enable. High = ON; Low = OFF. MIC5501/5502 should not float. MIC5503/5504 have internal pull-down and may float. |
-| 4 | 1 | VIN | Supply input. |
-| — | 4 | NC | No connection. |
-| EP | — | ePAD | Exposed heatsink pad. Connect to GND for best thermal performance. |
-
-## Application Information
-- Input capacitor: 1 µF required from input to ground.
-- Output capacitor: 1 µF or greater required for stability; low-ESR ceramic recommended.
-- No-load stability: stable with no load.
-- Enable/shutdown: active-high; forcing EN low disables regulator and enters virtually zero-current off state.
-- Thermal: calculate power dissipation as  
-  \[
-  P_D=(V_{IN}-V_{OUT})\times I_{OUT}+V_{IN}\times I_{GND}
-  \]
-  Ground current contribution is usually <1% and can be ignored.
-
-### Thermal Example
-For \(V_{IN}=3.6V\), \(V_{OUT}=2.8V\), \(I_{OUT}=300mA\):
+## Rated Voltage
 \[
-P_D=(3.6-2.8)\times 0.3=0.240W
+V=\sqrt{P\times R}
 \]
-Using \(\theta_{JA}=250°C/W\), \(T_{J(MAX)}=125°C\):
-\[
-T_A=65°C
-\]
+or maximum working voltage, whichever is less.
 
-## Typical Application Schematic
-- C1 = 1 µF/10 V input capacitor
-- C2 = 1 µF/10 V output capacitor
-- U1 = MIC550x-xYMT
+## Power Derating
+Rated power at 70°C; derate linearly to zero at 125°C or 155°C depending on size.
 
-## PCB Layout Recommendations
-- Keep input and output capacitors close to the device.
-- Connect exposed pad to GND for thermal performance.
+## Tests and Requirements
+Includes:
+- TCR
+- Life/endurance
+- High-temperature exposure
+- Moisture resistance
+- Humidity
+- Thermal shock
+- Short-time overload
+- Board flex/bending
+- Solderability
+- Leaching
+- Resistance to soldering heat

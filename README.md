@@ -92,7 +92,7 @@ ever active.
 
 | Ref | Part | Package | Purpose |
 |---|---|---|---|
-| U1 | VL53L8CXV9GC/1 (no liner) or V0GC/1 (with liner) | LGA-16, 6.4 × 3.0 × 1.75 mm | The sensor. SPI mode, LPn and I²C_RST pulled up on board |
+| U1 | VL53L8CXV0GC/1 (with liner) | LGA-16, 6.4 × 3.0 × 1.75 mm | The sensor. SPI mode, LPn and I²C_RST pulled up on board |
 | U2 | MIC5504-1.8YMT | DFN-4, 1.0 × 1.0 mm | 1.8 V LDO: CORE_1V8 + IOVDD + VCCA of U3/U5. EN tied to IN |
 | U3 | SN74AXC4T774RSVR | UQFN-16, 2.6 × 1.8 mm | SCLK / MOSI / MISO translator, **OE = NCS_S**, DIR1/2/3 = GND, DIR4 = 1V8 |
 | U5 | SN74AXC1T45 (DCK SC70-6 or DBV SOT-23-6) | SC70-6 / SOT-23-6 | NCS translator. **DIR = GND ⇒ B→A** (3.3 V host drives 1.8 V sensor) |
@@ -112,13 +112,13 @@ ever active.
 | R5 | 47 kΩ | 0402 | SPI_I2C_N → IOVDD (selects SPI) |
 | R6 | 6.8 kΩ | 0402 | SCLK_S → 1V8. Holds SCLK at its mode-3 idle level so selecting the board cannot create a spurious clock edge |
 | R7 | 4.7 kΩ | 0402 | NCS_H → 3V3. Keeps every board deselected while the host is in reset |
-| J1 | 1×6 header, 2.54 mm | THT | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS |
+| J1 | PH1-06-UA (Adam Tech) | THT 1×6, 2.54 mm | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS |
 
 ### 2.2 System BOM (outside the carriers)
 
 | Ref | Part | Value / notes | Qty |
 |---|---|---|---|
-| U10 | Load switch, TPS22918 class | ≥ 1.5 A at 3.3 V. **CT open** ⇒ t_R ≈ 95 µs. Feeds all five carriers | 1 |
+| U10 | TPS22918TDBVRQ1 | ≥ 1.5 A at 3.3 V. **CT open** ⇒ t_R ≈ 95 µs. **QOD tied to VOUT**. Feeds all five carriers | 1 |
 | R10 | 100 kΩ | ON pin → GND. The rail must default **off**; the datasheet states no internal pull-down | 1 |
 | C10 | 22 µF | at the switch VIN. Reservoir against IR drop in the harness | 1 |
 | C11 | 1 µF | at the switch VOUT | 1 |
@@ -131,6 +131,14 @@ carrier and system rows, DNP options flagged with Qty 0).
 
 ### 2.3 Why these parts
 
+- **TPS22918TDBVRQ1** (AEC-Q100, SOT-23-6 DBV) — 2 A, 52 mΩ typical.
+  Pins: 1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT. ON is high-threshold-safe
+  (V_IH ≥ 1 V) but **must not float** — hence the 100 kΩ pull-down. R_ON at
+  3.3 V is 53 mΩ typ / 59 mΩ max at 25 °C / **107 mΩ max over −40…+105 °C**,
+  so the drop at 750 mA is 44 mV typical and 80 mV worst case. **Tie QOD to
+  VOUT** to enable the internal 25 Ω discharge — left open, the rail decays only
+  through its own load and the "power cycle" is lost. CT open gives the 95 µs
+  rise, valid because VIN (the bulk) is already steady when ON goes high.
 - **MIC5504-1.8** — 300 mA, output ±2 % initial and ±3 % over temperature
   ⇒ 1.746–1.854 V, inside the sensor's 1.62–1.98 V window. Its ~25 Ω
   auto-discharge keeps the 1.8 V rail from creeping up while the rail is off.
@@ -245,7 +253,7 @@ of SCLK and MOSI only if you see ringing.
 
 | Rail | Source | Load | Notes |
 |---|---|---|---|
-| 3.3 V AVDD / VCCB | External, switched | 465 mA typ, 750 mA peak for all five | ≥ 1.5 A supply, 3.3 V ±3 % at the far board |
+| 3.3 V AVDD / VCCB | External, switched | 465 mA typ, 750 mA peak for all five | ≥ 1.5 A supply, 3.3 V ±3 % at the far board; switch drop 59 mV (25 °C) / 80 mV (hot) at 750 mA |
 | 1.8 V CORE/IOVDD/VCCA | U2 per board | ~90 mA peak per board | 1.746–1.854 V; 135 mW dissipated per LDO |
 | Teensy | USB | ~40–100 mA | Never feeds the sensors |
 
@@ -395,12 +403,13 @@ datasheets (DS14161 Rev 7, SCES898C, SCES882E, TCA9406, MIC550x, TPS22918,
 Teensyduino core). Rounds 9–10 produced no BLOCKER/MAJOR/MINOR findings; round 11
 was a **verification pass**, not a review: 57 rows, **47 PASS / 10 NV / 0 FAIL**.
 
-There is nothing left to fix in the source. The 10 NV rows are bench- or
-document-only closures:
+There is nothing left to fix in the source. Nine of the ten NV rows are still
+open (R1 closed on paper once the TPS22918-Q1 datasheet was read); all are
+bench- or document-only closures:
 
 | ID | Open item | Closes by | If marginal |
 |---|---|---|---|
-| R1 | TPS22918 t_D(CT = 0), ON V_IH, current limit, QOD resistance | scope ON→rail edge | t_R > 275 µs ⇒ fit CT; still slow ⇒ reopen rail design |
+| R1 | TPS22918-Q1 R_ON, ON V_IH, QOD, t_R(CT open) | **Closed on paper** from the datasheet: R_ON ≤ 59 mΩ at 25 °C (107 mΩ over temperature), ON V_IH ≥ 1 V, t_R = 95 µs at 3.3 V, QOD = 25 Ω internal | still scope t_R under the real 36.5 µF load; t_R > 275 µs ⇒ fit CT |
 | R2 | MIC5504 turn-on endpoints | CORE_1V8 window per board (≤ 58.3 µs) | Different LDO needed |
 | R3 | ST firmware's actual 320 B block set | successful `start_ranging` | Re-audit the trim |
 | R4 | Re-init of a **streaming** sensor | forced-demote test | Add a rail cycle to the retry path (switch already supports it) |
