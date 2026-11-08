@@ -68,7 +68,7 @@
  * the library's own vl53l8cx.cpp). A #define in a sketch cannot change the copy
  * the library emits.
  */
-#if defined(__IMXRT1062__) || defined(ARDUINO_TEENSY40) || defined(ARDUINO_TEENSY41)
+#if defined(__IMXRT1062__)
   #ifndef DEFAULT_I2C_BUFFER_LEN
     #define DEFAULT_I2C_BUFFER_LEN 128
   #elif DEFAULT_I2C_BUFFER_LEN > 128

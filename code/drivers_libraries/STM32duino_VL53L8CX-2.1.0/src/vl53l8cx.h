@@ -238,7 +238,7 @@ class VL53L8CX {
           digitalWrite(cs_pin, LOW);
           // LOCAL PATCH: let U5/U3 enable before the first SCLK edge.
           delayMicroseconds(VL53L8CX_CS_SETTLE_US);
-          dev_spi->transfer(&data_write, 2);
+          dev_spi->transfer(data_write, 2);
           for (uint16_t i = 0; i < data_size; i++) {
             *(p_values + i + position) = dev_spi->transfer(0x00);
           }
@@ -318,7 +318,7 @@ class VL53L8CX {
           digitalWrite(cs_pin, LOW);
           // LOCAL PATCH: let U5/U3 enable before the first SCLK edge.
           delayMicroseconds(VL53L8CX_CS_SETTLE_US);
-          dev_spi->transfer(&data_write, data_size);
+          dev_spi->transfer(data_write, data_size);
           digitalWrite(cs_pin, HIGH);
           dev_spi->endTransaction();
         }

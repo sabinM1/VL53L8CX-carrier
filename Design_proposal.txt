@@ -1,4 +1,9 @@
-# VL53L8CX × 5 ↔ Waveshare RP2350-Zero Mini: Final Aggregated Design (Rev 2)
+# VL53L8CX × 5 carrier — Teensy 4.0: Final Aggregated Design (Rev 8)
+
+> **Current specification.** The host is the **Teensy 4.0**; §13 onward is the
+> current design. Sections 0–12 are the historical RP2350-Zero Mini analysis from
+> Rev 2 and are kept for provenance only. **Do not use their RP2350 pin map or
+> power budget.** The RP2350 host was abandoned in Rev 3.
 
 Date: 2026-11-02. Supersedes `VL53L8CX_Teensy40_Final_Aggregated_Design.md` (Rev 1, single board, Teensy 4.0, Variants A/B).
 
@@ -1042,5 +1047,19 @@ sources; the MAJOR pair was settled from DS14161 Table 3.
 | F12 | Inrush tally omitted the 1.8 V-side capacitance | **Fixed** — ≈1.5 A including the LDO-side charge, still inside the 2 A switch |
 
 R10 is now closed with Rev-8 measurements (Arduino CLI 1.5.1 / teensy:avr 1.62.0):
-Mode A 46 736 flash / 108 576 RAM1; Mode B 47 904 / 110 624; bring-up
-46 032 / 99 040.
+Mode A 46 736 flash / 108 576 RAM1; bring-up 46 032 / 99 040.
+
+### 13.18 Final revision pass (Rev 8, post-freeze)
+
+A last independent read of the 15-file bundle found no BLOCKER. The three items
+marked "fix before fabrication" were addressed, and the NITs were cleaned:
+
+| Item | Resolution |
+|---|---|
+| Design_proposal title/§0 still described the RP2350 host | **Fixed** — title now names the Teensy 4.0 and a banner states that §0–§12 are historical RP2350 analysis; §13+ is current |
+| 100 nF BOM MPN used tolerance J (±5 %), which is not in the Yageo X5R ordering table | **Fixed** — all six 100 nF parts are now `CC0402KRX5R6BB104` (K = ±10 %, 6 = 10 V, X5R, 0402). Reel packaging to be confirmed at order |
+| `vl53l8cx_platform_config_custom.h` guarded on `ARDUINO_TEENSY40/41` | **Fixed** — only `__IMXRT1062__` is used; the Teensy core defines it reliably |
+| `dev_spi->transfer(&data_write, …)` pointer-to-array | **Cleaned** — both calls now pass `data_write`; no behavioural change |
+| MIC5504 125 µs max turn-on vs the 58.3 µs window | **Reviewed, not a defect.** The 58.3 µs limit applies to the 0.9→1.6 V segment, not the full 1.8 V ramp. At 125 µs full-scale that segment is ≈48.6 µs. R2 remains the bench check. |
+
+Both remaining sketches compile unchanged after these edits.

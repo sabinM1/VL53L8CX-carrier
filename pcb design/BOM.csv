@@ -4,14 +4,14 @@ U2,Carrier,5,MIC5504-1.8,MIC5504-1.8YMT-TR,UDFN-4 1.0x1.0 mm (MT),1.8 V LDO for 
 U3,Carrier,5,SN74AXC4T774,SN74AXC4T774RSVR,UQFN-16 2.6x1.8 mm (RSV),SCLK/MOSI/MISO 3.3 V <-> 1.8 V translator,OE = NCS_S; DIR1/2/3 = GND; DIR4 = 1V8; DIR and OE are VCCA-referenced; pinout confirmed (VCCA 14 VCCB 13 GND 8 OE 7 A1-A4 1-4 B1-B4 12/11/10/9 DIR1/2 15/16 DIR3/4 5/6)
 U5,Carrier,5,SN74AXC1T45,SN74AXC1T45DTQR,X2SON-6 1.0x0.8 mm,NCS translator 3.3 V -> 1.8 V,CONFIRMED datasheet; pins 1=VCCA 2=GND 3=A 4=B 5=DIR 6=VCCB; DIR = GND => B->A; DTQR is the sourced part (DCK/DBV are same-die alternatives only)
 C1,Carrier,5,4.7 uF X5R 10 V,C1005X5R1A475K050BC,0402 (C1005),AVDD decoupling at U1.C4,CONFIRMED 4.7 uF 10 V X5R +/-10 %; check DC-bias derating at 3.3 V; raise to 0603 if residual < ~2 uF
-C2,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,CORE_1V8 decoupling at U1.B7,100 nF 10 V X5R decoded; tolerance J and thickness BB not listed in the supplied Yageo X5R catalog - verify on distributor page
-C3,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,IOVDD decoupling at U1.A3,Within 3 mm of pin; same caveat as C2
-C4,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U3 VCCA decoupling,Within 3 mm of U3; same caveat as C2
-C5,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U3 VCCB decoupling,Within 3 mm of U3; same caveat as C2
+C2,Carrier,5,100 nF,CC0402KRX5R6BB104,0402,CORE_1V8 decoupling at U1.B7,100 nF 10 V X5R +/-10%; K tolerance per Yageo ordering table (6 = 10 V); verify reel at order
+C3,Carrier,5,100 nF,CC0402KRX5R6BB104,0402,IOVDD decoupling at U1.A3,Within 3 mm of pin; 10 V X5R +/-10%
+C4,Carrier,5,100 nF,CC0402KRX5R6BB104,0402,U3 VCCA decoupling,Within 3 mm of U3; 10 V X5R +/-10%
+C5,Carrier,5,100 nF,CC0402KRX5R6BB104,0402,U3 VCCB decoupling,Within 3 mm of U3; 10 V X5R +/-10%
 C6,Carrier,5,2.2 uF X5R 10 V,C1005X5R1A225K050BC,0402 (C1005),U2 input decoupling,CONFIRMED 2.2 uF 10 V X5R +/-10 %; must stay >= 1 uF at 3.3 V DC bias
 C7,Carrier,5,1 uF X5R 10 V,MCASL105SB5105KFNA01,0402,U2 output decoupling,CONFIRMED Taiyo Yuden MCAS 1 uF 10 V (L) X5R (B5) +/-10 % (K); confirm case size and thickness on product page
-C8,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U5 VCCA decoupling,Within 3 mm of U5; same caveat as C2
-C9,Carrier,5,100 nF,CC0402JRX5R6BB104,0402,U5 VCCB decoupling,Within 3 mm of U5; same caveat as C2
+C8,Carrier,5,100 nF,CC0402KRX5R6BB104,0402,U5 VCCA decoupling,Within 3 mm of U5; 10 V X5R +/-10%
+C9,Carrier,5,100 nF,CC0402KRX5R6BB104,0402,U5 VCCB decoupling,Within 3 mm of U5; 10 V X5R +/-10%
 R1,Carrier,5,47 kohm,RC0402DR-0747KL,0402,NCS_S pull-up to 1V8,CONFIRMED Yageo RC 47 kohm +/-0.5 % 7-in reel; holds NCS_S high while U5 is indeterminate
 R2,Carrier,5,47 kohm,RC0402DR-0747KL,0402,INT pull-up to 1V8,INT not routed to host
 R3,Carrier,5,47 kohm,RC0402DR-0747KL,0402,SYNC pull-up to 1V8,Do not tie SYNC across boards
