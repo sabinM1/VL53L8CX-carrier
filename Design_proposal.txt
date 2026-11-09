@@ -1116,3 +1116,59 @@ change is needed, because the pin, the polarity and the ordering are identical.
 
 **BOM effect:** per carrier 4 IC + 7 R + 9 C = 20 -> **5 IC + 7 R + 10 C = 22**.
 System rows: U10/C10/C11/PSU1/HAR1/R8/R9 deleted; DC1, R10, CB1, T4, ST1 remain.
+
+---
+
+### 13.20 Rev 10 — carrier header changes to 2x4 (supersedes the J1 rows of §7.1, §8, §13.15 and §13.19)
+
+**Change.** `J1` goes from a 1x7 to a **2x4**: `PH1-07-UA` -> **`PH2-08-UA`**
+(Adam Tech, dual-row member of the same PH series). Both rows are 2.54 mm pitch
+and the row spacing is 2.54 mm, so the pad field is 4 x 2 holes on a 2.54 mm
+grid. No other part changes; the carrier stays at **22 SMD parts**.
+
+| Pin | Net | Row |
+|---|---|---|
+| 1 | `3V3_IN` | A |
+| 2 | `GND` | B |
+| 3 | `GND` | A |
+| 4 | `SCLK` | B |
+| 5 | `MOSI` | A |
+| 6 | `MISO` | B |
+| 7 | `NCS` | A |
+| 8 | `RAIL_EN` | B |
+
+**Why:**
+
+1. **Length.** 2x4 spans 3 x 2.54 = **7.62 mm** between end pins (body ~10.2 mm)
+   against the 1x7's 15.24 mm (body ~17.8 mm). The board outline shrinks ~7.6 mm
+   along the header edge; the header body grows 2.54 mm across, which sits in the
+   unused space beside the connector.
+2. **A second ground, for free.** The 8th pin is `GND`, not a signal. Pins 1 and
+   2 face each other, so the supply and its return form the smallest possible
+   loop, and pin 3 halves the harness return resistance and puts a ground next to
+   the signal row.
+3. **Keyed harness becomes possible.** An 8-way 2x4 IDC ribbon socket is a
+   standard, polarised part, which removes the 180-degree mis-mate risk of a bare
+   unshrouded header.
+
+**Verified from the part listing** (LCSC C3329181 / DigiKey / Mouser for
+`PH2-08-UA`): 2 rows, 8 positions, 2.54 mm pitch, 2.54 mm row spacing, THT
+straight, square brass pins, **gold plating**, **3 A per contact**, 250 V,
+-55...+105 C, insulation height 2.5 mm, 5.97 mm mating pin, 3.05 mm tail.
+**Not stated on the listing:** finished hole diameter. The 1.02 mm figure carried
+in the BOM and the PCB guide is inherited from the PH1 drawing and must be
+confirmed on the PH2 series drawing before the footprint is drawn.
+
+**Superseded text (left in place as the Rev-9 record):** §7.1's `J1 | PH1-07-UA`
+row, §8's `J1-3..J1-6` netlist references and harness paragraph, §13.15's J1
+line, and §13.19's `J1 becomes 1x7` paragraph. The authoritative map is the table
+above. Historical §2-§12 J1 references describe the pre-Rev-9 1x6 header.
+
+**Firmware effect: none.** No sketch or library file contains a carrier header
+pin number. `RAIL_EN_PIN = 2` is a Teensy pin and is unchanged; the header end of
+that wire simply moves from J1-7 to J1-8.
+
+**Documentation updated with this change:** `README.md` (component table, §4.1,
+§4.3 harness), `NEXT_STEPS.md` (1.1, 2.2, 2.3, 2.7, 3.7, B0),
+`pcb design/Schematic_and_PCB_Guide.md` (§0, §2.1, §2.2, §3.6, §3.7, §4 S16, §5,
+§7, §8, §9) and `pcb design/BOM.csv`.

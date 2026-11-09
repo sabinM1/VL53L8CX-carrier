@@ -129,7 +129,7 @@ The single external switch board is gone. Each carrier carries its own
                                     U2 ──► 1V8 ──► CORE_1V8, IOVDD, VCCA
 ```
 
-- **RAIL_EN** is J1-7 on every carrier, wired in parallel, driven by Teensy
+- **RAIL_EN** is J1-8 on every carrier, wired in parallel, driven by Teensy
   pin 2. One 100 kΩ (R10) at the host holds it low until firmware raises it.
 - **CT open, no footprint. QOD strapped to VOUT.** Same as Rev 8 — the
   internal 25 Ω discharges the local rail when ON drops.
@@ -137,7 +137,7 @@ The single external switch board is gone. Each carrier carries its own
   too**, so a power cycle removes AVDD and the 1.8 V rail together (DS14161
   requires exactly that), the switch drop falls from 40–80 mV to ~5 mV, and
   there is no sixth assembly to build.
-- Cost: **+2 parts per carrier** (U10, C10) and **J1 becomes 1×7**. Per-board
+- Cost: **+2 parts per carrier** (U10, C10) and **J1 becomes 2×4**. Per-board
   count is now 5 IC + 7 R + 10 C = **22**.
 
 ### 1.2 Ordering rule, still mandatory
@@ -158,14 +158,15 @@ Work on one carrier sheet; instantiate it five times. Use the detailed steps in
       and the buck module (DC1) is an off-board part wired to J1-1.
 - [ ] **2.2** Place U1 (VL53L8CX), U2 (MIC5504-1.8, UDFN-4), U3
       (SN74AXC4T774RSVR, RSV), U5 (SN74AXC1T45DTQR, X2SON-6), U10
-      (TPS22918TDBVRQ1, SOT-23-6) and J1 (1×7).
+      (TPS22918TDBVRQ1, SOT-23-6) and J1 (2×4, `PH2-08-UA`).
 - [ ] **2.3** Enter the verified pin numbers, not a generic symbol:
       - U3: VCCA 14, VCCB 13, GND 8, OE 7, A1–A4 1–4, B1–B4 12/11/10/9,
         DIR1/2 15/16, DIR3/4 5/6.
       - U5: 1 VCCA, 2 GND, 3 A, 4 B, 5 DIR, 6 VCCB; **DIR = GND ⇒ B→A**.
       - U2: 1 VOUT, 2 GND, 3 EN, 4 VIN, EP = GND.
       - U10: 1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT.
-      - J1: 1 3V3_IN, 2 GND, 3 SCLK, 4 MOSI, 5 MISO, 6 NCS, 7 RAIL_EN.
+      - J1: 1 3V3_IN, 2 GND, 3 GND, 4 SCLK, 5 MOSI, 6 MISO, 7 NCS, 8 RAIL_EN.
+        Pins 2 and 3 are the same `GND` net; odd pins = row A, even = row B.
 - [ ] **2.4** Capture the nets exactly as listed in the guide §2.1–§2.3. The
       load-bearing connection: **`NCS_S` drives U1.C2, R1, and U3.OE (pin 7)**.
       NCS must not pass through U3.
@@ -176,7 +177,7 @@ Work on one carrier sheet; instantiate it five times. Use the detailed steps in
       U2, C8/C9 at U5, **C10 at U10.1 (3V3_IN)**. Values per BOM.
 - [ ] **2.7** On-carrier power: **J1-1 (3V3_IN) → C10 → U10 → 3V3_SW**, and
       3V3_SW feeds U1 AVDD, U2.VIN, U3.VCCB, U5.VCCB and R7. U10: **CT open,
-      no footprint; QOD (5) strapped to VOUT (6); ON (3) = J1-7 RAIL_EN**. U2.EN
+      no footprint; QOD (5) strapped to VOUT (6); ON (3) = J1-8 RAIL_EN**. U2.EN
       tied to U2.IN. R10 and CB1 are host-side and not on this sheet.
 - [ ] **2.8** ERC: no unconnected pins except U3.A3 (no connect) and U10.CT
       (no footprint). Check power flags on `3V3_IN`, `3V3_SW`, `1V8`, `GND` —
@@ -209,9 +210,9 @@ Follow `pcb design/Schematic_and_PCB_Guide.md` §5–§12. Order matters:
       rest) sized for 150 mA with margin, joined **only** through U10; `1V8`
       sized for 100 mA; solid GND on the bottom layer, no splits under
       U1/U3; U2 and U10 copper on both layers with vias.
-- [ ] **3.7** Silkscreen: J1 pin 1 and all **seven** pin names (3V3_IN, GND,
+- [ ] **3.7** Silkscreen: J1 pin 1 and all **eight** pin names (3V3_IN, GND, GND,
       SCLK, MOSI, MISO, NCS, RAIL_EN); board ID and revision. There is no
-      moulded pin-1 mark on the header.
+      moulded pin-1 mark on the header, and a 2×4 can be plugged in rotated.
 - [ ] **3.8** DRC at the fab minimums; archive the report.
 - [ ] **3.9** Outputs: Gerbers, drill, BOM, pick-and-place, stencil with split
       thermal apertures.
@@ -241,8 +242,11 @@ checked in 3D.
 Record every measurement; a step is not closed until the number is written down.
 
 ### B0 — Harness (DMM)
-- [ ] Continuity J1-1…J1-7 on all five; no 3V3_IN–GND short.
-- [ ] Harness ≤ 20 cm, one ground per board, round-trip supply R < 0.15 Ω.
+- [ ] Continuity J1-1…J1-8 on all five; J1-2 and J1-3 both on GND; no
+      3V3_IN–GND short.
+- [ ] Harness ≤ 20 cm, **two grounds per board** (J1-2 and J1-3), round-trip
+      supply R < 0.15 Ω. An 8-way 2×4 IDC ribbon is the easiest route and is
+      keyed, so the plug cannot go in rotated.
 
 ### B1 — Rail statics (DMM, all five ranging)
 - [ ] DC1 output 3.23–3.37 V (2 % accuracy) at the module.

@@ -150,7 +150,7 @@ patching an unmaintained library. It also buys no throughput. See
 
 - **Power-up slew and the sensor reset are both solved by one load switch per
   carrier** (U10, TPS22918), so per-board EN networks are not fitted at all.
-  `RAIL_EN` (J1-7) is common to all five and held low by one 100 kΩ at the host.
+  `RAIL_EN` (J1-8) is common to all five and held low by one 100 kΩ at the host.
   - Switch: **TPS22918-Q1**, **CT open** ⇒ t_R ≈ 95 µs at 3.3 V, which is inside
     the 275 µs CORE_1V8-tracking budget, so EN = IN per board stays.
     DS14161 Table 5 wants 0.9 → 1.6 V in ≤ **58.3 µs** and AVDD full level in

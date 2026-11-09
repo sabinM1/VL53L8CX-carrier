@@ -70,7 +70,7 @@ action of `setup()`.
 
 ```mermaid
 flowchart LR
-    J1["J1 1x7"] --> IN["3V3_IN"]
+    J1["J1 2x4"] --> IN["3V3_IN"]
     IN --> C10["C10 4.7 uF"]
     C10 --> U10["U10 TPS22918"]
     J1 -->|RAIL_EN| U10
@@ -122,7 +122,7 @@ ever active.
 | R5 | 47 kΩ | 0402 | SPI_I2C_N → IOVDD (selects SPI) |
 | R6 | 6.8 kΩ | 0402 | SCLK_S → 1V8. Holds SCLK at its mode-3 idle level so selecting the board cannot create a spurious clock edge |
 | R7 | 4.7 kΩ | 0402 | NCS_H → `3V3_SW` (**switched** rail). Keeps every board deselected while the host is in reset |
-| J1 | PH1-07-UA (Adam Tech), straight 1×7 | THT 1×7, 2.54 mm, 1.02 mm holes | 3V3_IN, GND, SCLK, MOSI, MISO, NCS, RAIL_EN |
+| J1 | PH2-08-UA (Adam Tech), straight 2×4 | THT 2×4, 2.54 mm pitch and row spacing, 1.02 mm holes | 3V3_IN, GND, GND, SCLK, MOSI, MISO, NCS, RAIL_EN |
 
 ### 2.2 System BOM (outside the carriers)
 
@@ -203,17 +203,23 @@ SMT pads**, not header pins.
 
 ## 4. Exposed pins and wiring to the Teensy
 
-### 4.1 Carrier header J1 (1×7, 2.54 mm) — same on every board
+### 4.1 Carrier header J1 (2×4, 2.54 mm) — same on every board
 
 | Pin | Net | Direction (host view) | Level | Notes |
 |---|---|---|---|---|
 | 1 | `3V3_IN` | Power in | 3.3 V | Unswitched, from the DC1 buck. Feeds U10 only. **Never** from the Teensy 3.3 V pin |
-| 2 | `GND` | Power return | 0 V | One ground wire per board, star point at the host |
-| 3 | `SCLK` | Host → carrier | 3.3 V | Buffered to 1.8 V by U3 B1 → A1 |
-| 4 | `MOSI` | Host → carrier | 3.3 V | U3 B2 → A2 |
-| 5 | `MISO` | Carrier → host | 3.3 V | U3 A4 → B4; Hi-Z unless that board is selected |
-| 6 | `NCS` | Host → carrier | 3.3 V | U5 B → A; also enables that board's U3 |
-| 7 | `RAIL_EN` | Host → carrier | 3.3 V | U10 ON. **Wired in parallel on all five**, driven by Teensy pin 2, one 100 kΩ to GND at the host. Raise it **before** driving any CS pin |
+| 2 | `GND` | Power return | 0 V | Supply return, directly across from pin 1 |
+| 3 | `GND` | Power return | 0 V | Second ground: signal return, and halves the harness return resistance |
+| 4 | `SCLK` | Host → carrier | 3.3 V | Buffered to 1.8 V by U3 B1 → A1 |
+| 5 | `MOSI` | Host → carrier | 3.3 V | U3 B2 → A2 |
+| 6 | `MISO` | Carrier → host | 3.3 V | U3 A4 → B4; Hi-Z unless that board is selected |
+| 7 | `NCS` | Host → carrier | 3.3 V | U5 B → A; also enables that board's U3 |
+| 8 | `RAIL_EN` | Host → carrier | 3.3 V | U10 ON. **Wired in parallel on all five**, driven by Teensy pin 2, one 100 kΩ to GND at the host. Raise it **before** driving any CS pin |
+
+Pin 1 is the odd-pin row; the 2×4 gives a 7.6 mm pin span instead of the
+former 1×7's 15.2 mm, which is what shortens the board. The header is
+unshrouded and has no moulded pin-1 mark, so **the silk marker plus a keyed
+socket (8-way 2×4 IDC) is the only thing preventing a 180° mis-mate**.
 
 Nothing else leaves the carrier. INT, SYNC, LPn and C1 (`SPI_I2C_N`, which is
 also the I²C-mode interface reset) stay on-board, pulled to 1.8 V. There is no
@@ -246,23 +252,25 @@ Notes:
 
 ```
 Teensy 3.3 V logic side            Carrier J1 (×5)
-  pin 13  ── SCLK ────────────────  J1-3  (all boards in parallel)
-  pin 11  ── MOSI ────────────────  J1-4  (all boards in parallel)
-  pin 12  ── MISO ────────────────  J1-5  (all boards in parallel)
-  pin 10  ── CS0 ─────────────────  J1-6  board 0
-  pin  9  ── CS1 ─────────────────  J1-6  board 1
-  pin  8  ── CS2 ─────────────────  J1-6  board 2
-  pin  7  ── CS3 ─────────────────  J1-6  board 3
-  pin  6  ── CS4 ─────────────────  J1-6  board 4
-  GND     ── GND ─────────────────  J1-2  (one wire per board)
-  pin  2  ── RAIL_EN ─────────────  J1-7  (all five boards in parallel;
+  pin 13  ── SCLK ────────────────  J1-4  (all boards in parallel)
+  pin 11  ── MOSI ────────────────  J1-5  (all boards in parallel)
+  pin 12  ── MISO ────────────────  J1-6  (all boards in parallel)
+  pin 10  ── CS0 ─────────────────  J1-7  board 0
+  pin  9  ── CS1 ─────────────────  J1-7  board 1
+  pin  8  ── CS2 ─────────────────  J1-7  board 2
+  pin  7  ── CS3 ─────────────────  J1-7  board 3
+  pin  6  ── CS4 ─────────────────  J1-7  board 4
+  GND     ── GND ─────────────────  J1-2 + J1-3  (two wires per board)
+  pin  2  ── RAIL_EN ─────────────  J1-8  (all five boards in parallel;
                                          one 100 kΩ to GND at the host)
   3V3_IN from DC1 ───────────────  J1-1  (all boards; ≥ 1 A buck)
 ```
 
 Keep the harness ≤ 20 cm, route a ground return alongside each signal, and give
-each carrier its own ground wire. Optional 22 Ω series resistors at the host end
-of SCLK and MOSI only if you see ringing.
+each carrier its own ground wire pair. An 8-way 2×4 IDC ribbon assembly is the
+neatest option and is keyed, which removes the 180° mis-mate risk of the bare
+header. Optional 22 Ω series resistors at the host end of SCLK and MOSI only if
+you see ringing.
 
 ---
 

@@ -31,7 +31,7 @@ primary document wins:
 | CORE_1V8 slew | 0.9 → 1.6 V in **≤ 58.3 µs** (minimum 0.012 V/µs) | DS14161 Table 5 |
 | AVDD slew | full level in ≤ 3.3 ms (minimum 0.001 V/µs) | DS14161 Table 5 |
 | SPI sink/source | V_OL ≤ 0.2 × IOVDD at 4 mA; V_IH ≥ 0.7 × IOVDD | DS14161 Table 15 |
-| Header | J1 1×7: 3V3_IN, GND, SCLK, MOSI, MISO, NCS, RAIL_EN | Design |
+| Header | J1 2×4: 3V3_IN, GND, GND, SCLK, MOSI, MISO, NCS, RAIL_EN | Design |
 | Address/straps | SPI_I2C_N, LPn pulled to IOVDD | Design |
 | Reset | **None on the sensor.** U10 on the carrier is the reset (kills AVDD and 1V8 together) | Design |
 | Board count | 5 identical carriers | Design |
@@ -82,8 +82,8 @@ documentation reference them.
 | `3V3_IN` | J1-1, C10, U10.1 (VIN) |
 | `3V3_SW` | U10.6 (VOUT), U10.5 (QOD strap), C1, U1.C4 (AVDD), U2.IN, C6, U3.13 (VCCB), C5, U5.6 (VCCB), C9, R7 |
 | `1V8` | U2.OUT, C7, U1.A3 (IOVDD) + C3, U1.B7 (CORE_1V8) + C2, U3.14 (VCCA) + C4, U5.1 (VCCA) + C8, R1, R2, R3, R4, R5, R6 |
-| `GND` | J1-2, U1.C3, U1.C7, U1.B4 (thermal pad), U2.GND, U2.EP, U3.8, U5.2, U10.2, C1–C10 returns |
-| `RAIL_EN` | J1-7, U10.3 (ON). No on-board pull-down — R10 is at the host |
+| `GND` | J1-2, J1-3, U1.C3, U1.C7, U1.B4 (thermal pad), U2.GND, U2.EP, U3.8, U5.2, U10.2, C1–C10 returns |
+| `RAIL_EN` | J1-8, U10.3 (ON). No on-board pull-down — R10 is at the host |
 
 `U2.EN` ties to `U2.IN` (`3V3_SW`), so the LDO tracks the switch's edge. There
 is **no** per-board enable network.
@@ -96,10 +96,10 @@ is U10's channel (pins 1 → 6). `3V3_SW` exists only after U10, so the AVDD and
 
 | Net | Connections |
 |---|---|
-| `SCLK_H` | J1-3, U3.12 (B1), R6 is **not** here |
-| `MOSI_H` | J1-4, U3.11 (B2) |
-| `MISO_H` | J1-5, U3.9 (B4) |
-| `NCS_H` | J1-6, U5.4 (B), R7 to `3V3_SW` |
+| `SCLK_H` | J1-4, U3.12 (B1), R6 is **not** here |
+| `MOSI_H` | J1-5, U3.11 (B2) |
+| `MISO_H` | J1-6, U3.9 (B4) |
+| `NCS_H` | J1-7, U5.4 (B), R7 to `3V3_SW` |
 | `SCLK_S` | U3.1 (A1), U1.A5 (SCL/MCLK), **R6 to `1V8`** |
 | `MOSI_S` | U3.2 (A2), U1.A4 (SDA/MOSI) |
 | `MISO_S` | U3.4 (A4), U1.C5 (MISO) |
@@ -202,16 +202,35 @@ pull-down) and do not move R7 to the host.
 
 ### 3.6 Header (J1)
 
-1. 1×7, 2.54 mm, THT, **straight/vertical** (Adam Tech `PH1-07-UA`, same
-   drawing as the sourced 1×6), pin 1 = `3V3_IN`.
-2. Footprint: 1.02 mm holes on 2.54 mm pitch, 15.24 mm pin span, 17.78 mm
-   overall, 2.50 mm body width, 3 A per contact, gold flash. **Straight, not
-   right-angle** — a right-angle part will not fit this pattern or the board
-   outline.
-3. Pin order must be **3V3_IN, GND, SCLK, MOSI, MISO, NCS, RAIL_EN**. A keyed
-   or shrouded header is fine if the harness matches.
-4. **Silkscreen pin 1 and all seven signal names.** The connector has no moulded
-   pin-1 mark, and five identical boards will be plugged in blind.
+1. **2×4, 2.54 mm, THT, straight/vertical** — Adam Tech `PH2-08-UA`, the
+   dual-row member of the same PH series as the previously sourced `PH1-06-UA`:
+   8 positions, 2 rows, 2.54 mm pitch **and** 2.54 mm row spacing, square brass
+   pins, gold plating, **3 A per contact**, −55…+105 °C.
+2. Footprint: 1.02 mm holes on 2.54 mm pitch in both directions; **7.62 mm**
+   between the two end pins (vs 15.24 mm for the 1×7), row spacing 2.54 mm,
+   body ≈ 5.08 mm wide. **Straight, not right-angle.** The 2×4 pattern is about
+   7.6 mm shorter than the 1×7, which is what allows the board outline to shrink.
+3. Pin order (odd pins on row A, even pins on row B):
+
+| Pin | Net |
+|---|---|
+| 1 | `3V3_IN` |
+| 2 | `GND` |
+| 3 | `GND` (second return; a full duplicate of pin 2) |
+| 4 | `SCLK` |
+| 5 | `MOSI` |
+| 6 | `MISO` |
+| 7 | `NCS` |
+| 8 | `RAIL_EN` |
+
+4. Pins 1 and 2 sit **directly across from each other** so the supply and its
+   return form the smallest possible loop; pin 3 halves the harness return
+   resistance and puts a ground next to the signals.
+5. **Silkscreen pin 1 and all eight net names.** The header has no moulded
+   pin-1 mark, and a 2×4 outline has 180° rotational symmetry — the only
+   protection against a reversed plug is the board silkscreen plus a
+   **keyed/polarised socket** (an 8-way 2×4 IDC ribbon socket is the natural
+   harness choice) or a shrouded box header.
 
 ### 3.7 Load switch (on every carrier)
 
@@ -224,7 +243,7 @@ pull-down) and do not move R7 to the host.
 |---|---|---|---|
 | 1 | VIN | `3V3_IN` | At J1-1, with C10 4.7 µF to GND within 3 mm |
 | 2 | GND | `GND` | Via to the ground pour |
-| 3 | ON | `RAIL_EN` | J1-7. **No on-board pull-down** — R10 is at the host, one for all five |
+| 3 | ON | `RAIL_EN` | J1-8. **No on-board pull-down** — R10 is at the host, one for all five |
 | 4 | CT | — | **No connection, no footprint** |
 | 5 | QOD | `3V3_SW` | **Strap directly to pin 6**, no external resistor |
 | 6 | VOUT | `3V3_SW` | Feeds the whole carrier |
@@ -236,7 +255,7 @@ pull-down) and do not move R7 to the host.
    3.3 V: ~7.1 µF of `3V3_SW` capacitance discharges with τ ≈ 0.2 ms. With the
    pin open, QOD is disabled and the power-cycle recovery silently stops
    working.
-5. `RAIL_EN` must be pulled low by **R10 100 kΩ at the host** (J1-7 → GND).
+5. `RAIL_EN` must be pulled low by **R10 100 kΩ at the host** (J1-8 → GND).
    ON leakage ≤ 0.1 µA gives 10 mV across 100 kΩ, far below V_IL = 0.5 V, so the
    rail is **off** whenever the host is off, resetting, or before firmware runs.
 6. **Ordering rule:** assert `RAIL_EN` before driving any CS line. With
@@ -278,6 +297,7 @@ Run ERC, then check each row by hand. Every row must pass before layout.
 | S13 | LDO EN = IN, no per-board enable network | No 2N7002, no RC |
 | S14 | No reset line to the sensor | Only U10 |
 | S15 | No part added or removed vs the 22-part BOM | Count = 22 |
+| S16 | J1 is the 2×4 map: 1 `3V3_IN`, 2 `GND`, 3 `GND`, 4 `SCLK`, 5 `MOSI`, 6 `MISO`, 7 `NCS`, 8 `RAIL_EN`; pins 2 and 3 both on the `GND` net | Eight pins, two of them ground, no signal swapped |
 
 ---
 
@@ -288,11 +308,14 @@ There is no frozen outline. Choose one and record it, then reuse it for all five
 Suggested starting point for a hand-solderable, single-sensor carrier:
 
 - Outline ≈ 24–28 mm × 12–15 mm, 1.6 mm FR4, 2 layers, 1 oz copper
-  (≈2 mm longer than before to fit U10 and C10).
+  (≈2 mm longer than before to fit U10 and C10; the 2×4 header buys back
+  ≈5 mm of that length versus the former 1×7).
 - Sensor U1 at one end, optical axis clear of every other part and of the board
   edge (the 45°×45° FoV plus the collector exclusion cone must not see the
   carrier, the harness, or the next board).
-- J1 on the opposite edge, pointing away from the sensor.
+- J1 on the opposite edge, pointing away from the sensor. Reserve the 2×4 pad
+  field (2 × 2.54 mm row spacing) plus ≈2 mm of clearance on the pin-1 side for
+  the silk marker.
 - U10 and C10 on the J1 side, next to pin 1 (the 3.3 V entry).
 - U3 and U5 adjacent to each other, both close to U1.
 - LDO on the J1 side, in copper.
@@ -368,7 +391,7 @@ layers connected by vias; this is the only deliberately warm part.
 | `3V3_IN` | **Short and wide**: J1-1 → C10 → U10.1. This net carries the whole board current, so make it a fat trace or a small pour |
 | `3V3_SW` | ≥ 0.5 mm where possible, or a small pour; from U10.6 out to C1, U2, U3.13, U5.6, R7. Keep it out of the U10.1 → C10 loop |
 | `1V8` | Pour or ≥ 0.4 mm; C7 at the LDO, C2/C3 at the sensor |
-| `GND` | Continuous ground pour on the bottom layer, stitched to top around the sensor, the LDO and U10 |
+| `GND` | Continuous ground pour on the bottom layer, stitched to top around the sensor, the LDO and U10. J1 pins 2 and 3 land in the pour separately |
 
 Two-layer stackup: signal + components on top, solid ground on the bottom. Do
 not split the ground under the sensor. Do not route the 1.8 V rail as a long
@@ -388,9 +411,9 @@ only, if scoping shows ringing. Do not fit them pre-emptively.
 - **Stencil**: 90–150 µm, with the thermal-pad apertures split into the eight
   rectangles; do not let the stencil house merge them into one opening.
 - Assembly drawing: mark U1 pin 1 and the B4 thermal pad, mark **J1 pin 1**
-  (the header has no moulded mark), and print the cleaning and coating
-  prohibition plus the **sensor-liner removal step (after reflow, before the
-  cover glass)** on it.
+  (the header has no moulded mark **and a 2×4 can be plugged in 180° rotated**),
+  and print the cleaning and coating prohibition plus the **sensor-liner removal
+  step (after reflow, before the cover glass)** on it.
 - Panelize the five carriers **identically oriented** so the optical axis and
   connector side match after separation. Add fiducials to the panel.
 - Provide the assembler with: MSL3 handling note, reflow limits, no-wash /
@@ -454,7 +477,7 @@ rework. Do not exceed 260 °C on the cap under any circumstance.
 | L9 | Solid GND on the bottom layer, no splits under U1/U3 | Visual |
 | L10 | `3V3_IN` and `3V3_SW` copper sized for 150 mA with margin; the J1-1 → C10 → U10.1 loop is short | Visual |
 | L11 | U2 and U10 have copper on both layers + vias | Visual |
-| L12 | J1 pin 1 and **all seven** signal names on silkscreen | Visual |
+| L12 | J1 pin 1 and **all eight** pin names on silkscreen | Visual |
 | L13 | Optical axis clear of every component and the board edge | Visual + 3D |
 | L14 | Stencil layer contains the split thermal apertures | Check the fab output |
 | L15 | DRC clean at the fab's minimums; ERC clean | Reports archived |
