@@ -1,12 +1,13 @@
 # Schematic and PCB design guide — VL53L8CX carrier
 
-How to turn the frozen design in `../Design_proposal.txt` (Rev 8) into a
+How to turn the frozen design in `../Design_proposal.txt` (Rev 9) into a
 schematic and a fabricated board. Read `../README.md` first for the system
 overview.
 
-This is a **two-layer, 20-part carrier** repeated five times, plus one small
-system power board (or a wired assembly) for the 3.3 V load switch. Nothing here
-is high speed: 3 MHz SPI, 400 kHz I²C, 150 mA per LDO.
+This is a **two-layer, 22-part carrier** repeated five times. There is **no
+separate power board**: each carrier carries its own 3.3 V load switch (U10),
+and the only external power part is a 3S→3.3 V buck module (DC1). Nothing here
+is high speed: 3 MHz SPI, 150 mA per LDO.
 
 **Document precedence.** Where this guide and a primary document disagree, the
 primary document wins:
@@ -30,25 +31,38 @@ primary document wins:
 | CORE_1V8 slew | 0.9 → 1.6 V in **≤ 58.3 µs** (minimum 0.012 V/µs) | DS14161 Table 5 |
 | AVDD slew | full level in ≤ 3.3 ms (minimum 0.001 V/µs) | DS14161 Table 5 |
 | SPI sink/source | V_OL ≤ 0.2 × IOVDD at 4 mA; V_IH ≥ 0.7 × IOVDD | DS14161 Table 15 |
-| Header | J1 1×6: 3V3_EXT, GND, SCLK, MOSI, MISO, NCS | Design |
-| Address/straps | SPI_I2C_N, LPn, I²C_RST pulled to IOVDD | Design |
-| Reset | **None on board.** The system load switch is the reset | Design |
+| Header | J1 1×7: 3V3_IN, GND, SCLK, MOSI, MISO, NCS, RAIL_EN | Design |
+| Address/straps | SPI_I2C_N, LPn pulled to IOVDD | Design |
+| Reset | **None on the sensor.** U10 on the carrier is the reset (kills AVDD and 1V8 together) | Design |
 | Board count | 5 identical carriers | Design |
 
-Carrier part count: **20 SMD parts** (4 ICs, 7 resistors, 9 capacitors) + J1.
+Carrier part count: **22 SMD parts** (5 ICs, 7 resistors, 10 capacitors) + J1.
 Do not add parts without a review entry in `Design_proposal.txt`.
+
+### 0.1 Power tree (Rev 9)
+
+```
+3S LiPo -> CB1 (>= 47 uF) -> DC1 buck -> 3V3_IN on all five J1-1
+                                              |
+                        per carrier: C10 (4.7 uF) -> U10 (TPS22918) -> 3V3_SW
+                                              |
+              3V3_SW -> U1 AVDD, U2 VIN, U3 VCCB, U5 VCCB, R7
+                         U2 -> 1V8 -> CORE_1V8, IOVDD, VCCA
+```
+
+`3V3_IN` and `3V3_SW` are **two different nets on every carrier**, joined only
+through U10. Never short them.
 
 ---
 
 ## 1. Sheet plan
 
-Use three schematic sheets (or three clearly separated areas on one sheet):
+Use two schematic sheets (or two clearly separated areas on one sheet):
 
 | Sheet | Contents |
 |---|---|
-| 1 — Carrier (root) | U1 sensor, U2 LDO, U3/U5 translators, all passives, J1. This sheet is copied ×5 |
-| 2 — System power | 3.3 V input, load switch U10, R10, C10/C11, bulk, star ground, harness connector |
-| 3 — Host interface | Teensy 4.0 pin map as a connector or notes block, only if you draw the harness |
+| 1 — Carrier (root) | U1 sensor, U2 LDO, U3/U5 translators, U10 load switch, all passives, J1. This sheet is copied ×5 |
+| 2 — Host interface | Teensy 4.0 pin map, RAIL_EN resistor R10, notes block for DC1/CB1. Only draw it if you draw the harness |
 
 Keep the carrier sheet **identical** across the five instances. Use a
 hierarchical sheet or a replicated block so a change cannot be applied to only
@@ -65,12 +79,18 @@ documentation reference them.
 
 | Net | Connections |
 |---|---|
-| `3V3` | J1-1, C1, U1.C4 (AVDD), U2.IN, C6, U3.13 (VCCB), C5, U5.6 (VCCB), C9, R7 |
+| `3V3_IN` | J1-1, C10, U10.1 (VIN) |
+| `3V3_SW` | U10.6 (VOUT), U10.5 (QOD strap), C1, U1.C4 (AVDD), U2.IN, C6, U3.13 (VCCB), C5, U5.6 (VCCB), C9, R7 |
 | `1V8` | U2.OUT, C7, U1.A3 (IOVDD) + C3, U1.B7 (CORE_1V8) + C2, U3.14 (VCCA) + C4, U5.1 (VCCA) + C8, R1, R2, R3, R4, R5, R6 |
-| `GND` | J1-2, U1.C3, U1.C7, U1.B4 (thermal pad), U2.GND, U3.8, U5.2, C1–C9 returns |
+| `GND` | J1-2, U1.C3, U1.C7, U1.B4 (thermal pad), U2.GND, U2.EP, U3.8, U5.2, U10.2, C1–C10 returns |
+| `RAIL_EN` | J1-7, U10.3 (ON). No on-board pull-down — R10 is at the host |
 
-`U2.EN` ties to `U2.IN` (3V3). There is **no** per-board enable network; the
-system load switch does the sequencing.
+`U2.EN` ties to `U2.IN` (`3V3_SW`), so the LDO tracks the switch's edge. There
+is **no** per-board enable network.
+
+**`3V3_IN` and `3V3_SW` must not be shorted.** The only connection between them
+is U10's channel (pins 1 → 6). `3V3_SW` exists only after U10, so the AVDD and
+1.8 V rails collapse together when `RAIL_EN` drops.
 
 ### 2.2 Signal nets
 
@@ -79,7 +99,7 @@ system load switch does the sequencing.
 | `SCLK_H` | J1-3, U3.12 (B1), R6 is **not** here |
 | `MOSI_H` | J1-4, U3.11 (B2) |
 | `MISO_H` | J1-5, U3.9 (B4) |
-| `NCS_H` | J1-6, U5.4 (B), R7 to `3V3` |
+| `NCS_H` | J1-6, U5.4 (B), R7 to `3V3_SW` |
 | `SCLK_S` | U3.1 (A1), U1.A5 (SCL/MCLK), **R6 to `1V8`** |
 | `MOSI_S` | U3.2 (A2), U1.A4 (SDA/MOSI) |
 | `MISO_S` | U3.4 (A4), U1.C5 (MISO) |
@@ -128,15 +148,15 @@ whole scheme; keep it.
 
 ### 3.2 LDO (U2, MIC5504-1.8)
 
-1. `IN` = `3V3`, `OUT` = `1V8`, `GND` = `GND`, `EN` = `IN`.
+1. `IN` = `3V3_SW`, `OUT` = `1V8`, `GND` = `GND`, `EN` = `IN`.
 2. C6 (2.2 µF) at IN, C7 (1 µF) at OUT, both within a few mm in layout.
 3. UDFN pinout is **1 = VOUT, 2 = GND, 3 = EN, 4 = VIN, exposed pad = GND**
    (confirmed from the Microchip datasheet). The EP is not optional — connect it.
-4. Add a note: *"EN tied to IN — the 3V3 rail edge does the sequencing."*
+4. Add a note: *"EN tied to IN — the `3V3_SW` edge does the sequencing."*
 
 ### 3.3 SPI translator (U3, SN74AXC4T774)
 
-1. VCCA = `1V8` (pin 14), VCCB = `3V3` (pin 13), GND = pin 8.
+1. VCCA = `1V8` (pin 14), VCCB = `3V3_SW` (pin 13), GND = pin 8.
 2. OE = pin 7 = `NCS_S`. Active low: NCS high ⇒ U3 Hi-Z.
 3. Channel map (A side is the 1.8 V sensor, B side the 3.3 V host):
    - A1/B1 = SCLK, DIR1 = GND (B→A)
@@ -154,7 +174,7 @@ whole scheme; keep it.
 ### 3.4 NCS translator (U5, SN74AXC1T45)
 
 1. VCCA = pin 1 = `1V8`, GND = pin 2, A = pin 3 = `NCS_S`, B = pin 4 = `NCS_H`,
-   DIR = pin 5 = `GND`, VCCB = pin 6 = `3V3`.
+   DIR = pin 5 = `GND`, VCCB = pin 6 = `3V3_SW`.
 2. **DIR = GND selects B→A**, so the 3.3 V host side drives the 1.8 V sensor
    side. This is the required direction, and the arrow in older text that said
    "A→B" was wrong.
@@ -174,7 +194,7 @@ whole scheme; keep it.
 | R4 | 47 kΩ | `U1.A2` | `1V8` | LPn high = enabled |
 | R5 | 47 kΩ | `U1.C1` | `1V8` | SPI mode |
 | R6 | 6.8 kΩ | `SCLK_S` | `1V8` | Holds mode-3 idle level so selecting the board cannot clock a bit |
-| R7 | 4.7 kΩ | `NCS_H` | `3V3` | Keeps the board deselected during host reset |
+| R7 | 4.7 kΩ | `NCS_H` | `3V3_SW` | Keeps the board deselected, and references the **switched** rail so it never back-feeds a dead node from the host's perspective |
 
 R6 and R7 are engineering additions, not datasheet requirements. Do not
 increase R6 above 7 kΩ (TI's external pull-up limit against the 71 kΩ internal
@@ -182,53 +202,58 @@ pull-down) and do not move R7 to the host.
 
 ### 3.6 Header (J1)
 
-1. 1×6, 2.54 mm, THT, **straight/vertical** (Adam Tech PH1-06-UA), pin 1 = `3V3_EXT`.
-2. Footprint: 1.02 mm holes on 2.54 mm pitch, 12.70 mm pin span, 15.24 mm overall,
-   2.50 mm body width, 3 A per contact, gold flash. **Straight, not right-angle**
-   — a right-angle part will not fit this pattern or the board outline.
-3. Pin order must be **3V3_EXT, GND, SCLK, MOSI, MISO, NCS**. A keyed or
-   shrouded header is fine if the harness matches.
-4. **Silkscreen pin 1 and the signal names.** The connector has no moulded pin-1
-   mark, and five identical boards will be plugged in blind.
+1. 1×7, 2.54 mm, THT, **straight/vertical** (Adam Tech `PH1-07-UA`, same
+   drawing as the sourced 1×6), pin 1 = `3V3_IN`.
+2. Footprint: 1.02 mm holes on 2.54 mm pitch, 15.24 mm pin span, 17.78 mm
+   overall, 2.50 mm body width, 3 A per contact, gold flash. **Straight, not
+   right-angle** — a right-angle part will not fit this pattern or the board
+   outline.
+3. Pin order must be **3V3_IN, GND, SCLK, MOSI, MISO, NCS, RAIL_EN**. A keyed
+   or shrouded header is fine if the harness matches.
+4. **Silkscreen pin 1 and all seven signal names.** The connector has no moulded
+   pin-1 mark, and five identical boards will be plugged in blind.
 
-### 3.7 System power sheet (one per system)
+### 3.7 Load switch (on every carrier)
 
-Net names: `3V3_IN` is the supply side, before the switch. `3V3_EXT` is the
-switched side that leaves on J1-1.
-
-1. `3.3 V supply` → ≥ 47 µF bulk → `3V3_IN` (C10 22 µF to GND) → U10 →
-   `3V3_EXT` (C11 1 µF to GND) → J1-1 of all five carriers.
+1. `J1-1 (3V3_IN)` → **C10 4.7 µF to GND** → **U10 pin 1 (VIN)** →
+   **U10 pin 6 (VOUT)** = `3V3_SW` → C1, U1.C4, U2.IN, C6, U3.13, U5.6, R7.
+   There is no C11: C1 and C6 are the output capacitance.
 2. U10 = **TPS22918TDBVRQ1**, SOT-23-6 (DBV), 2 A. Wire every pin:
 
 | Pin | Name | Net | Connection |
 |---|---|---|---|
-| 1 | VIN | `3V3_IN` | After the bulk capacitor and C10 |
-| 2 | GND | `GND` | Star point |
-| 3 | ON | `RAIL_EN` | Teensy pin 2, **plus R10 100 kΩ to GND placed at the switch** |
+| 1 | VIN | `3V3_IN` | At J1-1, with C10 4.7 µF to GND within 3 mm |
+| 2 | GND | `GND` | Via to the ground pour |
+| 3 | ON | `RAIL_EN` | J1-7. **No on-board pull-down** — R10 is at the host, one for all five |
 | 4 | CT | — | **No connection, no footprint** |
-| 5 | QOD | `3V3_EXT` | **Strap directly to pin 6**, no external resistor |
-| 6 | VOUT | `3V3_EXT` | C11 1 µF to GND, then to the carriers |
+| 5 | QOD | `3V3_SW` | **Strap directly to pin 6**, no external resistor |
+| 6 | VOUT | `3V3_SW` | Feeds the whole carrier |
 
 3. **CT stays open permanently.** 275 µs is an upper bound on the rail edge and
    CT only slows it further; if the CORE_1V8 window fails, CT cannot fix it.
    Do not fit a capacitor, do not lay out the pad.
 4. **QOD is strapped, not optional.** Direct tie enables the internal 25 Ω at
-   3.3 V: 36.5 µF discharges with τ ≈ 0.9 ms, peak 132 mA. With the pin open,
-   QOD is disabled and the power-cycle recovery silently stops working.
-5. **R10 is mandatory.** ON has no internal pull-down and must not float; ON
-   leakage ≤ 0.1 µA gives 10 mV across 100 kΩ, far below V_IL = 0.5 V. The rail
-   must therefore be **off** whenever the host is off, resetting, or before
-   firmware runs.
-6. U10 is also the only sensor reset: it kills AVDD and CORE_1V8 together, which
-   DS14161 requires. A per-board EN pull-down does not (AVDD stays up).
-7. Star ground: one point at the supply; five separate ground wires to the
+   3.3 V: ~7.1 µF of `3V3_SW` capacitance discharges with τ ≈ 0.2 ms. With the
+   pin open, QOD is disabled and the power-cycle recovery silently stops
+   working.
+5. `RAIL_EN` must be pulled low by **R10 100 kΩ at the host** (J1-7 → GND).
+   ON leakage ≤ 0.1 µA gives 10 mV across 100 kΩ, far below V_IL = 0.5 V, so the
+   rail is **off** whenever the host is off, resetting, or before firmware runs.
+6. **Ordering rule:** assert `RAIL_EN` before driving any CS line. With
+   `3V3_SW` dead, a driven NCS_H sinks ~0.7 mA per board through R7 into the
+   dead node. Firmware already does this (`RAIL_EN_PIN` is the first statement
+   of `setup()`).
+7. U10 is the only sensor reset, and because it sits on the carrier it kills
+   AVDD and CORE_1V8 **together**, which DS14161 requires. A per-board EN
+   pull-down does not (AVDD stays up).
+8. Star ground: one point at the host; five separate ground wires to the
    carriers; Teensy GND joins only at that point. Never join the Teensy 3.3 V
-   pin to `3V3_EXT`.
-8. The supply is specified as **3.3 V ±3 % at the far carrier's J1-1**, after
-   the switch drop and the harness. With ~0.19 V of worst-case loss, set a bench
-   supply to ~3.4 V (or verify ≥ 3.13 V at the far board under 750 mA).
-9. The bulk capacitor stays **upstream** of U10. Downstream bulk raises inrush
-   from ≈1.5 A toward ≈3 A.
+   pin to `3V3_IN`.
+9. Off-board power: `DC1` (Pololu #5266, 3.3 V buck) → `3V3_IN`; `CB1` ≥ 47 µF
+   ≥ 25 V at the **DC1 input** (battery side). DC1 is 2 % accurate, so
+   `3V3_IN` ≈ 3.234–3.366 V; the 5 mV switch drop and the harness resistance
+   keep the far-board AVDD above 3.13 V. Do not add bulk downstream of a
+   switch — it only raises that switch's inrush.
 
 ---
 
@@ -238,21 +263,21 @@ Run ERC, then check each row by hand. Every row must pass before layout.
 
 | # | Check | Pass criterion |
 |---|---|---|
-| S1 | `3V3` reaches sensor AVDD, both translator VCCBs and the LDO input | One net, no series part |
+| S1 | `3V3_SW` reaches sensor AVDD, both translator VCCBs and the LDO input | One net, no series part |
 | S2 | `1V8` reaches sensor IOVDD + CORE_1V8, both translator VCCAs, all pull-ups | One net |
 | S3 | No 3.3 V net touches any sensor pin except through U3/U5 | Zero exceptions |
 | S4 | U3.OE = `NCS_S` (not VCC, not GND) | Exactly one connection, to `NCS_S` |
 | S5 | U5 DIR = GND, U5 B = `NCS_H`, U5 A = `NCS_S` | Matches the direction table |
 | S6 | U3 DIR4 = `1V8`, DIR1/2/3 = GND | — |
 | S7 | U3 B3 = GND, A3 = NC | — |
-| S8 | R1–R5 = 47 kΩ to `1V8`; R6 = 6.8 kΩ; R7 = 4.7 kΩ to `3V3` | Values, not just references |
-| S9 | Every IC has a 100 nF within a few mm in the placement plan | C1–C9 all used, none orphaned |
-| S10 | No net named `3V3` is connected to J1 pin 1 | J1 carries `3V3_EXT` |
+| S8 | R1–R5 = 47 kΩ to `1V8`; R6 = 6.8 kΩ; R7 = 4.7 kΩ to `3V3_SW` | Values, not just references |
+| S9 | Every IC has a 100 nF within a few mm in the placement plan | C1–C10 all used, none orphaned |
+| S10 | `3V3_IN` and `3V3_SW` are **separate nets**, joined only by U10 | No short, no 0 Ω, no net tie |
 | S11 | DNC/RSVD pins match DS14161 Table 3 | Documented decision, not a guess |
 | S12 | Pin numbers match TI's pinout figures | **Pass** — U3 and U5 both confirmed |
 | S13 | LDO EN = IN, no per-board enable network | No 2N7002, no RC |
-| S14 | No reset line to the sensor | Only the rail switch |
-| S15 | No part added or removed vs the 20-part BOM | Count = 20 |
+| S14 | No reset line to the sensor | Only U10 |
+| S15 | No part added or removed vs the 22-part BOM | Count = 22 |
 
 ---
 
@@ -262,11 +287,13 @@ There is no frozen outline. Choose one and record it, then reuse it for all five
 
 Suggested starting point for a hand-solderable, single-sensor carrier:
 
-- Outline ≈ 22–26 mm × 12–15 mm, 1.6 mm FR4, 2 layers, 1 oz copper.
+- Outline ≈ 24–28 mm × 12–15 mm, 1.6 mm FR4, 2 layers, 1 oz copper
+  (≈2 mm longer than before to fit U10 and C10).
 - Sensor U1 at one end, optical axis clear of every other part and of the board
   edge (the 45°×45° FoV plus the collector exclusion cone must not see the
   carrier, the harness, or the next board).
 - J1 on the opposite edge, pointing away from the sensor.
+- U10 and C10 on the J1 side, next to pin 1 (the 3.3 V entry).
 - U3 and U5 adjacent to each other, both close to U1.
 - LDO on the J1 side, in copper.
 - Two M2 mounting holes, or a 3D-printed frame — the optical axis must be
@@ -318,8 +345,10 @@ Order of priority:
 3. **U3** close to U1 (the 1.8 V SPI nets are the short ones), **U5** beside U3
    so `NCS_S` is a few millimetres.
 4. **U2** with C6/C7, in copper, away from the sensor's optical axis.
-5. **R1–R7** near the pin they bias; R6 at `SCLK_S`, R7 at `NCS_H`.
-6. **J1** at the edge, pin 1 marked.
+5. **U10** beside J1 pin 1 with **C10 within 3 mm of U10.1** — this is the 3.3 V
+   entry point, so keep the J1-1 → C10 → U10.1 loop as small as possible.
+6. **R1–R7** near the pin they bias; R6 at `SCLK_S`, R7 at `NCS_H`.
+7. **J1** at the edge, pin 1 marked.
 
 Thermal: the LDO dissipates ≈135 mW at full load. Give U2 a copper pour on both
 layers connected by vias; this is the only deliberately warm part.
@@ -336,9 +365,10 @@ layers connected by vias; this is the only deliberately warm part.
 | `NCS_S` | **Shortest 1.8 V net on the board.** It drives U3's OE and the sensor's NCS. Keep it away from `SCLK_S` |
 | `SCLK_S` | Short; R6 at the sensor end or at U3 A1 |
 | `MOSI_S`, `MISO_S` | Short, direct |
-| `3V3` | ≥ 0.5 mm where possible, or a small pour; C1 at the sensor AVDD pin |
+| `3V3_IN` | **Short and wide**: J1-1 → C10 → U10.1. This net carries the whole board current, so make it a fat trace or a small pour |
+| `3V3_SW` | ≥ 0.5 mm where possible, or a small pour; from U10.6 out to C1, U2, U3.13, U5.6, R7. Keep it out of the U10.1 → C10 loop |
 | `1V8` | Pour or ≥ 0.4 mm; C7 at the LDO, C2/C3 at the sensor |
-| `GND` | Continuous ground pour on the bottom layer, stitched to top around the sensor and the LDO |
+| `GND` | Continuous ground pour on the bottom layer, stitched to top around the sensor, the LDO and U10 |
 
 Two-layer stackup: signal + components on top, solid ground on the bottom. Do
 not split the ground under the sensor. Do not route the 1.8 V rail as a long
@@ -422,9 +452,9 @@ rework. Do not exceed 260 °C on the cap under any circumstance.
 | L7 | `SCLK_H` is not a long parallel neighbour of `MISO_H` | Visual |
 | L8 | `NCS_S` does not run alongside `SCLK_S` | Visual |
 | L9 | Solid GND on the bottom layer, no splits under U1/U3 | Visual |
-| L10 | 3V3 and 1V8 copper sized for 150 mA with margin | Visual |
-| L11 | U2 has copper on both layers + vias | Visual |
-| L12 | J1 pin 1 and signal names on silkscreen | Visual |
+| L10 | `3V3_IN` and `3V3_SW` copper sized for 150 mA with margin; the J1-1 → C10 → U10.1 loop is short | Visual |
+| L11 | U2 and U10 have copper on both layers + vias | Visual |
+| L12 | J1 pin 1 and **all seven** signal names on silkscreen | Visual |
 | L13 | Optical axis clear of every component and the board edge | Visual + 3D |
 | L14 | Stencil layer contains the split thermal apertures | Check the fab output |
 | L15 | DRC clean at the fab's minimums; ERC clean | Reports archived |
@@ -435,8 +465,9 @@ rework. Do not exceed 260 °C on the cap under any circumstance.
 
 1. Visual: no paste bridges on the LGA, thermal pad wetted, no tombstoned
    passives.
-2. DMM: `3V3`–`GND` not shorted, `1V8`–`GND` not shorted. Power the first board
-   from a current-limited supply (100 mA limit) before connecting the Teensy.
+2. DMM: `3V3_IN`–`GND` not shorted, `3V3_SW`–`GND` not shorted **and not
+   shorted to each other**, `1V8`–`GND` not shorted. Power the first board from
+   a current-limited supply (100 mA limit) before connecting the Teensy.
 3. With the rail on, measure `1V8` = 1.755–1.845 V and AVDD = 3.13–3.47 V.
 4. Scope the rail edge and the CORE_1V8 window (pass: ≤ 58.3 µs for 0.9→1.6 V).
    Then drop ON: the rail should fall to < 0.33 V in a few ms (QOD 25 Ω × 36.5 µF
@@ -453,13 +484,15 @@ TCA9406 in the BOM and no Mode B sketch. Build the Mode A carrier only.
 
 ## 14. Do-not list
 
-- Do not connect the Teensy 3.3 V pin to `3V3_EXT`.
+- Do not connect the Teensy 3.3 V pin to `3V3_IN`.
 - Do not route NCS through U3.
 - Do not tie U3.OE to GND or VCC; it must be `NCS_S`.
 - Do not fit a pull-down on SCLK_S or any AXC data I/O.
 - Do not move R7 to the host side.
 - Do not add a per-board EN network or a sensor reset line.
-- Do not add bulk capacitance downstream of the load switch.
+- Do not add bulk capacitance between `3V3_IN` and U10 — it only raises that
+  switch's inrush. (C10 4.7 µF at U10.1 is the datasheet C_IN minimum plus the
+  local reservoir; that is the only capacitor before the switch.)
 - Do not leave the QOD pin open — tie it to VOUT, or there is no discharge path.
 - Do not leave the load-switch ON pin floating; it is not internally pulled down.
 - Do not use a CT capacitor on the load switch unless the scope says t_R is

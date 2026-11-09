@@ -1063,3 +1063,56 @@ marked "fix before fabrication" were addressed, and the NITs were cleaned:
 | MIC5504 125 µs max turn-on vs the 58.3 µs window | **Reviewed, not a defect.** The 58.3 µs limit applies to the 0.9→1.6 V segment, not the full 1.8 V ramp. At 125 µs full-scale that segment is ≈48.6 µs. R2 remains the bench check. |
 
 Both remaining sketches compile unchanged after these edits.
+
+### 13.19 Rev 9 — load switch moved onto the carrier (supersedes §7, §13.9)
+
+**Change.** The single external TPS22918 board (U10/R10/C10/C11 + PSU1) is
+removed. Each carrier now carries its own **U10 (TPS22918TDBVRQ1, SOT-23-6)**
+between J1-1 and everything else:
+
+```
+3S LiPo -> CB1 (>= 47 uF) -> DC1 (3.3 V buck) -> 3V3_IN on all five J1-1
+                                                      |
+                                    per carrier: C10 (4.7 uF) -> U10
+                                                      |
+                       3V3_SW -> U1 AVDD, U2 VIN, U3 VCCB, U5 VCCB, R7
+```
+
+| Ref | Qty | Where | Note |
+|---|---|---|---|
+| U10 | 5 | Carrier | TPS22918TDBVRQ1. CT open, no footprint. QOD (5) strapped to VOUT (6). ON (3) = J1-7 `RAIL_EN`, common to all five |
+| C10 | 5 | Carrier | 4.7 uF, reuses the C1 part. TPS22918 requires C_IN >= 1 uF. Replaces the former single 22 uF |
+| R10 | 1 | Host | 100 kOhm `RAIL_EN` -> GND. One resistor for all five switches |
+| CB1 | 1 | Host | >= 47 uF, >= 25 V, at the **DC1 input** for LC-spike suppression |
+| DC1 | 1 | Host | Pololu #5266 (APM81815, 3.3 V, 10.2 x 19.1 x 3.2 mm). 5-72 V in, 1.1 A at 48 V in and more at 3S, 2 % accuracy, soft-start, no reverse-voltage protection |
+
+**J1 becomes 1x7:** 3V3_IN / GND / SCLK / MOSI / MISO / NCS / RAIL_EN
+(`PH1-07-UA`, same Adam Tech PH1 drawing).
+
+**Why this supersedes §13.9's "system load switch":**
+
+1. **The reset becomes legal.** Switching on the carrier removes AVDD and the
+   1.8 V rail *together*, which DS14161 requires. The Rev-8 external switch
+   also did this, but only after the whole harness rail collapsed; here it is
+   local and the two rails are guaranteed to track.
+2. **Drop falls from 40-80 mV to ~5 mV.** Only 93 mA flows through each switch
+   (53 mOhm x 93 mA = 4.9 mV; 107 mOhm worst case over temperature is still
+   under 10 mV), so the far-board AVDD budget improves even though the buck is
+   only 2 % accurate: 3.234 V - 70 mV harness - 5 mV = **3.159 V** against the
+   3.13 V floor.
+3. **No sixth assembly.** The external switch board, its 22 uF and its 1 uF are
+   gone; the cost is +2 parts per carrier.
+4. **Inrush is bounded per switch:** ~7.1 uF of 3V3_SW capacitance plus ~1.4 uF
+   on the 1.8 V side charging through the LDO gives ~0.3 A per switch and
+   ~1.4 A if all five enable together — inside the switch's 2 A rating and
+   inside the buck's soft-start.
+
+**Unchanged:** CT open (t_R ~95 us, 95 us < 275 us budget); QOD to VOUT
+(internal 25 Ohm discharge); EN = IN on U2; R7 references the **switched** rail;
+`RAIL_EN` must be raised before any CS pin is driven (a driven NCS_H sinks
+~0.7 mA per board through R7 into the dead 3V3_SW node). `RAIL_EN_PIN = 2`
+remains the first statement of `setup()` in all three sketches — no firmware
+change is needed, because the pin, the polarity and the ordering are identical.
+
+**BOM effect:** per carrier 4 IC + 7 R + 9 C = 20 -> **5 IC + 7 R + 10 C = 22**.
+System rows: U10/C10/C11/PSU1/HAR1/R8/R9 deleted; DC1, R10, CB1, T4, ST1 remain.

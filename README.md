@@ -27,10 +27,11 @@ demoted sensor). Everything else is millimetres.
 | External rail | 3.3 V, **≥ 1.5 A**, switched, separate from the Teensy |
 | Typical / peak current | 465 mA / 750 mA on the external rail |
 | Frame size | 320 B (trimmed from 1444 B) |
-| Status | Design **Rev 8**, review loop converged; round-11 verification 47 PASS / 10 NV / 0 FAIL; pre-layout audit: 0 FAIL, all findings closed |
+| Status | Design **Rev 9** (per-carrier load switch, 3S→3.3 V buck), review loop converged; round-11 verification 47 PASS / 10 NV / 0 FAIL; pre-layout audit: 0 FAIL, all findings closed |
 
-> **The Teensy's own 3.3 V pin (~250 mA) never powers the array.** J1 carries
-> `3V3_EXT` from a separate supply. The two 3.3 V rails share only GND.
+> **The Teensy's own 3.3 V pin (~250 mA) never powers the array.** When the
+> array is on, J1 carries `3V3_IN` from a separate 3S→3.3 V buck. The two 3.3 V
+> rails share only GND.
 
 ---
 
@@ -38,41 +39,48 @@ demoted sensor). Everything else is millimetres.
 
 ```mermaid
 flowchart TB
+    BAT["3S LiPo, 9.0-12.6 V"] --> CB1["CB1 >= 47 uF"]
+    CB1 --> DC1["DC1 3.3 V buck"]
     USB["USB 5 V"] --> T["Teensy 4.0"]
-    PSU["3.3 V supply, at least 1.5 A"] --> LS["Load switch, TPS22918 class"]
-    T -->|"GPIO 2 = RAIL_EN"| LS
-    LS -->|"3V3_EXT"| C1["Carrier 0"]
-    LS -->|"3V3_EXT"| C2["Carrier 1"]
-    LS -->|"3V3_EXT"| C3["Carrier 2"]
-    LS -->|"3V3_EXT"| C4["Carrier 3"]
-    LS -->|"3V3_EXT"| C5["Carrier 4"]
+    DC1 -->|3V3_IN| C0["Carrier 0: U10 switch"]
+    DC1 -->|3V3_IN| C1["Carrier 1: U10 switch"]
+    DC1 -->|3V3_IN| C2["Carrier 2: U10 switch"]
+    DC1 -->|3V3_IN| C3["Carrier 3: U10 switch"]
+    DC1 -->|3V3_IN| C4["Carrier 4: U10 switch"]
+    T -->|"GPIO 2 = RAIL_EN"| C0
+    T -->|"GPIO 2 = RAIL_EN"| C1
+    T -->|"GPIO 2 = RAIL_EN"| C2
+    T -->|"GPIO 2 = RAIL_EN"| C3
+    T -->|"GPIO 2 = RAIL_EN"| C4
+    T -->|"SCLK, MOSI, MISO"| C0
     T -->|"SCLK, MOSI, MISO"| C1
-    T -->|"SCLK, MOSI, MISO"| C2
-    T -->|"SCLK, MOSI, MISO"| C3
-    T -->|"SCLK, MOSI, MISO"| C4
-    T -->|"SCLK, MOSI, MISO"| C5
+    T -->|"CS 10, 9, 8, 7, 6"| C0
     T -->|"CS 10, 9, 8, 7, 6"| C1
-    T -->|"CS 10, 9, 8, 7, 6"| C2
-    T -->|"CS 10, 9, 8, 7, 6"| C3
-    T -->|"CS 10, 9, 8, 7, 6"| C4
-    T -->|"CS 10, 9, 8, 7, 6"| C5
 ```
 
-The load switch is the **only** way the sensors are powered down. It is also the
-only reset that complies with DS14161 (all three supplies must fall together)
-and the recovery path for a hung sensor or a stuck I²C bus. Its ON pin has a
-100 kΩ pull-down, so the rail is **off at every Teensy reset**; firmware raises
-it as the first action of `setup()`.
+Each carrier carries **its own load switch (U10)**, so the five rails come up and
+fall together but are switched locally. That switch is the **only** way the
+sensors are powered down. Because it sits on the carrier, it removes **AVDD and
+the 1.8 V rail together** — the only sequence DS14161 allows — and the drop is
+~5 mV instead of 40–80 mV. A single 100 kΩ (R10) at the host holds `RAIL_EN` low,
+so the rail is **off at every Teensy reset**; firmware raises it as the first
+action of `setup()`.
 
 ### Per-carrier block diagram
 
 ```mermaid
 flowchart LR
-    J1["J1 1x6"] --> LDO["U2 MIC5504-1.8"]
+    J1["J1 1x7"] --> IN["3V3_IN"]
+    IN --> C10["C10 4.7 uF"]
+    C10 --> U10["U10 TPS22918"]
+    J1 -->|RAIL_EN| U10
+    U10 --> SW["3V3_SW"]
+    SW --> LDO["U2 MIC5504-1.8"]
     LDO --> V18["1V8: CORE_1V8 + IOVDD"]
+    SW -->|AVDD| S["U1 VL53L8CX"]
     J1 -->|"SCLK / MOSI / MISO"| U3["U3 SN74AXC4T774"]
     J1 -->|"NCS"| U5["U5 SN74AXC1T45"]
-    U5 -->|"NCS_S"| S["U1 VL53L8CX"]
+    U5 -->|"NCS_S"| S
     U5 -->|"NCS_S"| U3
     U3 <-->|"SPI 1.8 V"| S
 ```
@@ -88,7 +96,7 @@ ever active.
 
 ## 2. Components
 
-### 2.1 Per carrier board (×5 identical, 20 SMD parts each)
+### 2.1 Per carrier board (×5 identical, 22 SMD parts each)
 
 | Ref | Part | Package | Purpose |
 |---|---|---|---|
@@ -96,7 +104,8 @@ ever active.
 | U2 | MIC5504-1.8YMT | DFN-4, 1.0 × 1.0 mm | 1.8 V LDO: CORE_1V8 + IOVDD + VCCA of U3/U5. EN tied to IN |
 | U3 | SN74AXC4T774RSVR | UQFN-16, 2.6 × 1.8 mm | SCLK / MOSI / MISO translator, **OE = NCS_S**, DIR1/2/3 = GND, DIR4 = 1V8 |
 | U5 | SN74AXC1T45DTQR | X2SON-6, 1.0 × 0.8 mm | NCS translator. **DIR = GND ⇒ B→A** (3.3 V host drives 1.8 V sensor) |
-| C1 | 4.7 µF X5R 10 V | 0402 | AVDD at sensor pin C4 (check DC-bias derating, else 0603) |
+| U10 | TPS22918TDBVRQ1 | SOT-23-6, 2.9 × 1.6 mm | Local rail switch: `3V3_IN` → `3V3_SW`. **CT open, no footprint; QOD tied to VOUT; ON = RAIL_EN** |
+| C1 | 4.7 µF X5R 10 V | 0402 | AVDD at sensor pin C4, on `3V3_SW` (check DC-bias derating, else 0603) |
 | C2 | 100 nF | 0402 | CORE_1V8 at B7 |
 | C3 | 100 nF | 0402 | IOVDD at A3 |
 | C4 | 100 nF | 0402 | U3 VCCA |
@@ -105,41 +114,44 @@ ever active.
 | C7 | 1 µF X5R 10 V | 0402 | U2 output (auto-discharged by the MIC5504) |
 | C8 | 100 nF | 0402 | U5 VCCA |
 | C9 | 100 nF | 0402 | U5 VCCB |
+| C10 | 4.7 µF X5R 10 V | 0402 | U10 input reservoir on `3V3_IN` (TPS22918 needs C_IN ≥ 1 µF) |
 | R1 | 47 kΩ | 0402 | NCS_S → IOVDD |
 | R2 | 47 kΩ | 0402 | INT → IOVDD (INT is not routed to the host) |
 | R3 | 47 kΩ | 0402 | SYNC → IOVDD |
 | R4 | 47 kΩ | 0402 | LPn → IOVDD |
 | R5 | 47 kΩ | 0402 | SPI_I2C_N → IOVDD (selects SPI) |
 | R6 | 6.8 kΩ | 0402 | SCLK_S → 1V8. Holds SCLK at its mode-3 idle level so selecting the board cannot create a spurious clock edge |
-| R7 | 4.7 kΩ | 0402 | NCS_H → 3V3. Keeps every board deselected while the host is in reset |
-| J1 | PH1-06-UA (Adam Tech), straight 1×6 | THT 1×6, 2.54 mm, 1.02 mm holes, body 2.50 mm | 3V3_EXT, GND, SCLK, MOSI, MISO, NCS |
+| R7 | 4.7 kΩ | 0402 | NCS_H → `3V3_SW` (**switched** rail). Keeps every board deselected while the host is in reset |
+| J1 | PH1-07-UA (Adam Tech), straight 1×7 | THT 1×7, 2.54 mm, 1.02 mm holes | 3V3_IN, GND, SCLK, MOSI, MISO, NCS, RAIL_EN |
 
 ### 2.2 System BOM (outside the carriers)
 
+There is **no separate power board**. The load switch lives on each carrier, and
+the only external power part is the buck module that makes 3.3 V from the 3S
+battery.
+
 | Ref | Part | Value / notes | Qty |
 |---|---|---|---|
-| U10 | TPS22918TDBVRQ1 | ≥ 1.5 A at 3.3 V. **CT open** ⇒ t_R ≈ 95 µs. **QOD tied to VOUT**. Feeds all five carriers | 1 |
-| R10 | 100 kΩ | ON pin → GND. The rail must default **off**; the datasheet states no internal pull-down | 1 |
-| C10 | 22 µF | at the switch VIN. Reservoir against IR drop in the harness | 1 |
-| C11 | 1 µF | at the switch VOUT | 1 |
-| — | Bulk, ≥ 47 µF | **upstream** of the switch at the supply. Downstream bulk would push inrush toward 3 A | 1 |
-| — | 3.3 V supply | ≥ 1.5 A, 3.3 V ±3 % at the far board | 1 |
-| — | Harness | ≤ 20 cm, one ground wire per board, round-trip supply R < 0.15 Ω | 1 |
+| DC1 | Pololu **#5266** (APM81815, 3.3 V) | **The actual 3.3 V source.** 3S in (9.0–12.6 V), 1.1 A at 48 V in and more at 3S, 2 % accuracy, soft-start, ~1 g, 10.2 × 19.1 × 3.2 mm. **No reverse-voltage protection** | 1 |
+| R10 | 100 kΩ | `RAIL_EN` → GND at the host. One resistor covers all five switches; the TPS22918 has no internal pull-down | 1 |
+| CB1 | ≥ 47 µF, ≥ 25 V | At the **DC1 input** (battery side) for LC-spike suppression | 1 |
 
 A machine-readable version of both tables is in `pcb design/BOM.csv` (one file,
-carrier and system rows, DNP options flagged with Qty 0).
+carrier and system rows).
 
 ### 2.3 Why these parts
 
-- **TPS22918TDBVRQ1** (AEC-Q100, SOT-23-6 DBV) — 2 A, 53 mΩ typical.
-  Pins: 1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT. ON is high-threshold-safe
-  (V_IH ≥ 1 V) but **must not float** — hence the 100 kΩ pull-down. R_ON at
-  3.3 V is 53 mΩ typ / 59 mΩ max at 25 °C / **107 mΩ max over −40…+105 °C**,
-  so the drop at 750 mA is 40 mV typical, 44 mV max at 25 °C and 80 mV
-  worst case over temperature. **Tie QOD to
-  VOUT** to enable the internal 25 Ω discharge — left open, the rail decays only
-  through its own load and the "power cycle" is lost. CT open gives the 95 µs
-  rise, valid because VIN (the bulk) is already steady when ON goes high.
+- **TPS22918TDBVRQ1** (AEC-Q100, SOT-23-6 DBV) — 2 A, 53 mΩ typical, **one
+  per carrier** between `3V3_IN` and `3V3_SW`. Pins: 1 VIN, 2 GND, 3 ON, 4 CT,
+  5 QOD, 6 VOUT. It is a **switch, not a regulator** — it passes 3.3 V through
+  and can disconnect it. ON is high-threshold-safe (V_IH ≥ 1 V) but **must not
+  float** — hence R10. Because only 93 mA flows through each switch, the drop is
+  ~5 mV (53 mΩ × 93 mA), and even the 107 mΩ worst case over −40…+105 °C stays
+  under 10 mV. **Tie QOD to VOUT** to enable the internal 25 Ω discharge — left
+  open, the rail decays only through its own load and the "power cycle" is lost.
+  CT open gives the 95 µs rise; VIN is already steady when ON goes high. Switching
+  on the carrier is what makes the reset legal: AVDD and the 1.8 V rail fall
+  together, as DS14161 requires.
 - **MIC5504-1.8** — 300 mA, output ±2 % initial and ±3 % over temperature
   ⇒ 1.746–1.854 V, inside the sensor's 1.62–1.98 V window. Its ~25 Ω
   auto-discharge keeps the 1.8 V rail from creeping up while the rail is off.
@@ -191,16 +203,17 @@ SMT pads**, not header pins.
 
 ## 4. Exposed pins and wiring to the Teensy
 
-### 4.1 Carrier header J1 (1×6, 2.54 mm) — same on every board
+### 4.1 Carrier header J1 (1×7, 2.54 mm) — same on every board
 
 | Pin | Net | Direction (host view) | Level | Notes |
 |---|---|---|---|---|
-| 1 | `3V3_EXT` | Power in | 3.3 V | From the switched external rail. **Never** from the Teensy 3.3 V pin |
+| 1 | `3V3_IN` | Power in | 3.3 V | Unswitched, from the DC1 buck. Feeds U10 only. **Never** from the Teensy 3.3 V pin |
 | 2 | `GND` | Power return | 0 V | One ground wire per board, star point at the host |
 | 3 | `SCLK` | Host → carrier | 3.3 V | Buffered to 1.8 V by U3 B1 → A1 |
 | 4 | `MOSI` | Host → carrier | 3.3 V | U3 B2 → A2 |
 | 5 | `MISO` | Carrier → host | 3.3 V | U3 A4 → B4; Hi-Z unless that board is selected |
 | 6 | `NCS` | Host → carrier | 3.3 V | U5 B → A; also enables that board's U3 |
+| 7 | `RAIL_EN` | Host → carrier | 3.3 V | U10 ON. **Wired in parallel on all five**, driven by Teensy pin 2, one 100 kΩ to GND at the host. Raise it **before** driving any CS pin |
 
 Nothing else leaves the carrier. INT, SYNC, LPn and C1 (`SPI_I2C_N`, which is
 also the I²C-mode interface reset) stay on-board, pulled to 1.8 V. There is no
@@ -242,8 +255,9 @@ Teensy 3.3 V logic side            Carrier J1 (×5)
   pin  7  ── CS3 ─────────────────  J1-6  board 3
   pin  6  ── CS4 ─────────────────  J1-6  board 4
   GND     ── GND ─────────────────  J1-2  (one wire per board)
-  pin  2  ── RAIL_EN ─────────────  load switch ON
-  3.3 V switched rail ────────────  J1-1  (all boards; ≥1.5 A supply)
+  pin  2  ── RAIL_EN ─────────────  J1-7  (all five boards in parallel;
+                                         one 100 kΩ to GND at the host)
+  3V3_IN from DC1 ───────────────  J1-1  (all boards; ≥ 1 A buck)
 ```
 
 Keep the harness ≤ 20 cm, route a ground return alongside each signal, and give
@@ -256,9 +270,28 @@ of SCLK and MOSI only if you see ringing.
 
 | Rail | Source | Load | Notes |
 |---|---|---|---|
-| 3.3 V AVDD / VCCB | External, switched | 465 mA typ, 750 mA peak for all five | ≥ 1.5 A supply; **3.3 V ±3 % measured at J1-1 of the far carrier**, not at the supply terminals; switch drop 59 mV (25 °C) / 80 mV (hot) at 750 mA |
+| 3.3 V `3V3_IN` | DC1 buck from the 3S pack | 465 mA typ, 750 mA design max, 800 mA abs peak for all five | `3V3_IN` is **unswitched**; each carrier switches its own `3V3_SW` through U10 |
+| 3.3 V `3V3_SW` | U10, per carrier | 93 mA typ avg / 123 mA typ peak / 160 mA abs peak per board | Switch drop ~5 mV (53 mΩ × 93 mA); 2 % buck accuracy ⇒ worst-case far-board AVDD ≈ 3.16 V |
 | 1.8 V CORE/IOVDD/VCCA | U2 per board | ~90 mA peak per board | 1.746–1.854 V; 135 mW dissipated per LDO |
 | Teensy | USB | ~40–100 mA | Never feeds the sensors |
+
+**Where the current numbers come from.** DS14161 Rev 12 §7.4 Table 14 (p. 21),
+active ranging, average values, plus the datasheet's peak rule (*peak = average
++ 10 mA* per rail):
+
+| Per board, drawn from the 3.3 V rail | AVDD | CORE_1V8 (via U2) | IOVDD | Total |
+|---|---|---|---|---|
+| Typical average | 43 mA | 50 mA | 0.003 mA | **93 mA** |
+| Typical peak | 53 mA | 60 mA | 10 mA | **123 mA** |
+| Max average | 50 mA | 80 mA | 0.006 mA | **130 mA** |
+| Max peak | 60 mA | 90 mA | 10 mA | **160 mA** |
+
+CORE_1V8 and IOVDD are drawn from 3.3 V through U2 at ~1:1 current, so they add
+directly to the 3.3 V rail load. Five boards therefore draw 465 mA typical
+average, 615 mA typical peak, 650 mA max average and 800 mA absolute max peak.
+The design uses **750 mA** (5 × 150 mA = max peak with IOVDD's +10 mA omitted)
+as a deliberate worst-case sizing figure, not a measured value. Expect ~465 mA
+on a DMM in steady state.
 
 Slew requirements from DS14161 Table 5 (these are **minimums**):
 0.9 → 1.6 V on CORE_1V8/IOVDD in **≤ 58.3 µs**; AVDD to full level in ≤ 3.3 ms.
@@ -380,9 +413,9 @@ review/
 Numbers are pass criteria, not suggestions.
 
 **Before power**
-1. DMM: J1 continuity per board, no short between 3V3_EXT and GND, harness
+1. DMM: J1 continuity per board, no short between 3V3_IN and GND, harness
    ≤ 20 cm, round-trip supply resistance < 0.15 Ω.
-2. With the rail off, confirm no board is warm and 3V3_EXT is < 0.1 V.
+2. With RAIL_EN low, confirm no board is warm and every `3V3_SW` is < 0.1 V.
 
 **Stage 1 — one carrier**
 3. Power edges (scope, trigger on ON): AVDD 0→3.13 V in ≤ 3.3 ms (expect ~95 µs);
@@ -396,7 +429,7 @@ Numbers are pass criteria, not suggestions.
    5 or 9.
 8. MISO idle: all CS high, scope MISO_H — expect ≈ 0 V (internal pull-downs).
    If it floats, fit a 47 kΩ **pull-down** at the host; never a pull-up.
-9. Dead-sensor drill: cut one board's 3V3_EXT only. Its column → `-1` within
+9. Dead-sensor drill: lift one board's J1-1. Its column → `-1` within
    ~2 s, the other columns keep streaming, it returns within 40 s of restore.
 10. Forced re-init on a **streaming** sensor (R4): in `single_sensor_bringup`
     send `r` over serial. Confirm `init()` returns OK, frames resume, and no
@@ -439,7 +472,7 @@ document-only closures:
 
 | ID | Open item | Closes by | If marginal |
 |---|---|---|---|
-| R1 | TPS22918-Q1 R_ON, ON V_IH, QOD, t_R(CT open) | **Closed on paper** from the datasheet: R_ON ≤ 59 mΩ at 25 °C (107 mΩ over temperature), ON V_IH ≥ 1 V, t_R = 95 µs at 3.3 V, QOD = 25 Ω internal | still scope t_R under the real 36.5 µF load; t_R > 275 µs ⇒ fit CT |
+| R1 | TPS22918-Q1 R_ON, ON V_IH, QOD, t_R(CT open) | **Closed on paper** from the datasheet: R_ON ≤ 59 mΩ at 25 °C (107 mΩ over temperature), ON V_IH ≥ 1 V, t_R = 95 µs at 3.3 V, QOD = 25 Ω internal | still scope t_R under the real per-board ~7.1 µF load; t_R > 275 µs ⇒ fit CT |
 | R2 | MIC5504 turn-on endpoints | CORE_1V8 window per board (≤ 58.3 µs) | Different LDO needed |
 | R3 | ST firmware's actual 320 B block set | successful `start_ranging` | Re-audit the trim |
 | R4 | Re-init of a **streaming** sensor | forced-demote test | Add a rail cycle to the retry path (switch already supports it) |

@@ -4,8 +4,9 @@ Host: **Teensy 4.0** (NXP i.MX RT1062, 600 MHz, 3.3 V I/O, not 5 V tolerant).
 
 The carrier shifts 3.3 V ↔ 1.8 V (sensor IOVDD max 1.98 V) and the sensors run
 from the **external 3.3 V rail**. The Teensy 3.3 V pin is limited to ~250 mA and
-is **not** used by the carrier — J1 carries `3V3_EXT`, which powers the shifter
-high side (VCCA/VCCB) and the LDO.
+is **not** used by the carrier — J1 carries `3V3_IN` from a 3S→3.3 V buck, which
+each carrier switches locally through its own U10 (TPS22918) into `3V3_SW`, the
+rail that powers the shifter high side (VCCB) and the LDO.
 
 ## Sketches
 
@@ -142,22 +143,23 @@ patching an unmaintained library. It also buys no throughput. See
   re-baselines `last_update_ms[]` for every healthy sensor. Without that, one
   wedged sensor's ~2 s `init()` pushes all the others past their no-frame
   timeout and demotes the whole array.
-- A hung sensor with no reset line still needs a power cycle. The 3V3_EXT load
-  switch gives the host that power cycle.
+- A hung sensor with no reset line still needs a power cycle. The per-carrier
+  `RAIL_EN` switch gives the host that power cycle.
 
 ## Carrier items still open (from earlier rounds)
 
-- **Power-up slew and the sensor reset are both solved by one 3V3_EXT load
-  switch**, so per-board EN networks are not fitted at all.
-  - Switch: **TPS22918-class**, ≥ 1.5 A, **CT open** ⇒ t_R ≈ 95 µs at 3.3 V, which
-    is inside the 275 µs CORE_1V8-tracking budget, so EN = IN per board stays.
+- **Power-up slew and the sensor reset are both solved by one load switch per
+  carrier** (U10, TPS22918), so per-board EN networks are not fitted at all.
+  `RAIL_EN` (J1-7) is common to all five and held low by one 100 kΩ at the host.
+  - Switch: **TPS22918-Q1**, **CT open** ⇒ t_R ≈ 95 µs at 3.3 V, which is inside
+    the 275 µs CORE_1V8-tracking budget, so EN = IN per board stays.
     DS14161 Table 5 wants 0.9 → 1.6 V in ≤ **58.3 µs** and AVDD full level in
     ≤ 3.3 ms.
-  - Keep the ≥ 47 µF bulk **upstream**. Downstream capacitance is 5 × 7.1 µF
-    plus 1 µF at VOUT ≈ 36.5 µF on the 3.3 V side; the 1.8 V-side capacitors
-    (≈1.4 µF per board) charge through the LDO too, so inrush is ≈1.5 A —
-    inside the 2 A switch; adding bulk
-    downstream pushes it to ≈ 2.9 A.
+  - Because the switch sits **on the carrier**, it removes AVDD and the 1.8 V
+    rail together, which is the only power-down DS14161 accepts.
+  - Bulk ≥ 47 µF stays at the buck **input**. Downstream is ~7.1 µF of 3V3_SW
+    capacitance per board (plus ~1.4 µF on the 1.8 V side charging through the
+    LDO), so inrush is ≈0.3 A per switch, ≈1.4 A if all five enable together.
   - **100 kΩ pull-down on the switch's ON pin** — the datasheet does not state an
     internal one, and the rail must default off at host reset.
   - A per-board EN RC only sequences power **up**: pulling EN low auto-discharges
